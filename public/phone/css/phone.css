@@ -27,7 +27,9 @@ html, body {
   width: 110px;
   height: 110px;
   z-index: 100;
-  /* Markers are purely visual; touches must reach the map below */
+  /* Markers are purely visual overlays for the laptop webcam to detect.
+     pointer-events: none lets touch events pass through to the map below,
+     fixing the bug where touches on the right side of the map were blocked. */
   pointer-events: none;
   /* Smooth growth animation when phone is not detected */
   transition: width 0.4s ease, height 0.4s ease;
@@ -183,7 +185,8 @@ html, body {
   transform: translateX(-50%);
   display: none;
   z-index: 100;
-  /* Purely visual — touches must pass through to the content below */
+  /* Purely visual overlay for webcam detection — touches must pass through
+     to the example content (map/pong) rendered below this element. */
   pointer-events: none;
   image-rendering: pixelated;
   /* Smooth size transitions (mirrors .corner-marker searching animation) */
