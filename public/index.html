@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ReverseProjection</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>ReverseProjection</h1>
+      <div id="controls">
+        <div id="room-info">
+          Room: <span id="room-id">--</span>
+          <button id="copy-link">Copy Phone Link</button>
+        </div>
+        <div id="example-selector">
+          <button class="example-btn active" data-example="map">🗺️ Map</button>
+          <button class="example-btn" data-example="pong">🏓 Pong</button>
+        </div>
+        <div id="status">
+          <span id="phone-status">📱 Phone: not connected</span>
+          <span id="detection-status">👁️ Detection: idle</span>
+        </div>
+      </div>
+    </header>
+    <main>
+      <div id="webcam-container">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="detection-canvas"></canvas>
+        <canvas id="overlay-canvas"></canvas>
+      </div>
+      <div id="example-panel">
+      </div>
+    </main>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/js/colorDetector.js"></script>
+  <script src="/js/homography.js"></script>
+  <script src="/js/examples/mapExample.js"></script>
+  <script src="/js/examples/pongExample.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

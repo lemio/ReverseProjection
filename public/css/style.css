@@ -1,0 +1,183 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --accent: #e94560;
+  --text: #eaeaea;
+  --text-muted: #8a8a9a;
+  --green: #00ff88;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--surface2);
+  flex-shrink: 0;
+}
+
+header h1 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+#controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+#room-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+#room-id {
+  font-family: monospace;
+  font-weight: bold;
+  color: var(--text);
+  letter-spacing: 0.1em;
+}
+
+#example-selector {
+  display: flex;
+  gap: 0.4rem;
+}
+
+#status {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ── Buttons ── */
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+#copy-link {
+  background: var(--surface2);
+  color: var(--text);
+}
+#copy-link:hover { opacity: 0.85; }
+
+.example-btn {
+  background: var(--surface2);
+  color: var(--text-muted);
+}
+.example-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.example-btn:hover:not(.active) { opacity: 0.8; }
+
+/* ── Main layout ── */
+main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Webcam container ── */
+#webcam-container {
+  position: relative;
+  flex: 0 0 70%;
+  background: #000;
+  overflow: hidden;
+}
+
+#webcam {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#detection-canvas {
+  display: none;
+}
+
+#overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* ── Example panel ── */
+#example-panel {
+  flex: 1;
+  background: var(--surface);
+  border-left: 1px solid var(--surface2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Map fills the panel */
+#map-container {
+  flex: 1;
+}
+
+/* Leaflet attribution tweak */
+.leaflet-control-attribution {
+  font-size: 9px !important;
+}
+
+/* Pong canvas fills panel */
+#pong-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  html, body { overflow: auto; }
+  #app { height: auto; }
+  main { flex-direction: column; }
+  #webcam-container { flex: none; width: 100%; aspect-ratio: 4/3; }
+  #example-panel { flex: none; height: 300px; }
+  header { flex-wrap: wrap; }
+  #status { margin-left: 0; }
+}
