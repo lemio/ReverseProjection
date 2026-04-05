@@ -1,6 +1,6 @@
 (function() {
   function generateRoomId() {
-    return Math.random().toString(36).substr(2, 6).toUpperCase();
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
   }
 
   let roomId = localStorage.getItem('rpRoomId') || generateRoomId();
