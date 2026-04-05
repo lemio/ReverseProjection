@@ -8,14 +8,16 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>ReverseProjection Phone</title>
   <link rel="manifest" href="/phone/manifest.json">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/phone/css/phone.css">
 </head>
 <body>
   <div id="phone-app">
-    <div class="corner-marker" id="marker-tl"></div>
-    <div class="corner-marker" id="marker-tr"></div>
-    <div class="corner-marker" id="marker-bl"></div>
-    <div class="corner-marker" id="marker-br"></div>
+    <!-- Corner ArUco markers (canvas sized by CSS; drawMarker.js fills them) -->
+    <canvas class="corner-marker" id="marker-tl" data-marker-id="0"></canvas>
+    <canvas class="corner-marker" id="marker-tr" data-marker-id="42"></canvas>
+    <canvas class="corner-marker" id="marker-bl" data-marker-id="85"></canvas>
+    <canvas class="corner-marker" id="marker-br" data-marker-id="127"></canvas>
 
     <div id="connection-screen">
       <div class="connect-card">
@@ -37,10 +39,18 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/js/vendor/aruco-detector.js"></script>
+  <script src="/phone/js/drawMarker.js"></script>
   <script src="/phone/js/examples/mapPhone.js"></script>
   <script src="/phone/js/examples/pongPhone.js"></script>
   <script src="/phone/js/phoneApp.js"></script>
   <script>
+    // Draw ArUco patterns onto each corner canvas
+    document.querySelectorAll('.corner-marker[data-marker-id]').forEach(function(canvas) {
+      var id = parseInt(canvas.dataset.markerId, 10);
+      drawArucoMarker(canvas, id, canvas.offsetWidth || 110);
+    });
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/phone/sw.js').catch(console.error);
     }

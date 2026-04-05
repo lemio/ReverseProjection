@@ -34,6 +34,24 @@
       if (activePhoneExample && activePhoneExample.onState) {
         activePhoneExample.onState(state);
       }
+      // Toggle searching class on phone-app to grow markers when not detected
+      var phoneApp = document.getElementById('phone-app');
+      var wasSearching = phoneApp.classList.contains('searching');
+      var nowSearching = state && state.detected === false;
+      if (nowSearching !== wasSearching) {
+        if (nowSearching) {
+          phoneApp.classList.add('searching');
+        } else {
+          phoneApp.classList.remove('searching');
+        }
+        // Redraw markers after CSS transition completes (size changed)
+        setTimeout(function() {
+          document.querySelectorAll('.corner-marker[data-marker-id]').forEach(function(canvas) {
+            var id = parseInt(canvas.dataset.markerId, 10);
+            drawArucoMarker(canvas, id, canvas.offsetWidth);
+          });
+        }, 450); // slightly longer than the 0.4s CSS transition
+      }
     });
 
     // Show example area

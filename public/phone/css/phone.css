@@ -24,34 +24,26 @@ html, body {
 /* ── Corner markers ── */
 .corner-marker {
   position: absolute;
-  width: 90px;
-  height: 90px;
+  width: 110px;
+  height: 110px;
   z-index: 100;
+  /* Smooth growth animation when phone is not detected */
+  transition: width 0.4s ease, height 0.4s ease;
+  /* White halo so the black marker border pops on any background */
+  outline: 4px solid #fff;
+  image-rendering: pixelated;
 }
 
-#marker-tl {
-  top: 0;
-  left: 0;
-  background: red;
+/* When laptop can't find the phone: grow markers to aid detection */
+#phone-app.searching .corner-marker {
+  width: 160px;
+  height: 160px;
 }
 
-#marker-tr {
-  top: 0;
-  right: 0;
-  background: #00ff00;
-}
-
-#marker-bl {
-  bottom: 0;
-  left: 0;
-  background: blue;
-}
-
-#marker-br {
-  bottom: 0;
-  right: 0;
-  background: yellow;
-}
+#marker-tl { top: 0; left: 0; }
+#marker-tr { top: 0; right: 0; }
+#marker-bl { bottom: 0; left: 0; }
+#marker-br { bottom: 0; right: 0; }
 
 /* ── Connection screen ── */
 #connection-screen {
@@ -137,8 +129,8 @@ html, body {
 
 #example-content {
   flex: 1;
-  /* Space left after the markers: pad away from 90 px corners */
-  margin: 90px;
+  /* Space inset from the 110 px corner markers */
+  margin: 110px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -153,9 +145,9 @@ html, body {
 /* ── Status bar ── */
 #status-bar {
   position: absolute;
-  bottom: 90px;      /* just above the bottom markers */
-  left: 90px;
-  right: 90px;
+  bottom: 110px;      /* just above the bottom markers */
+  left: 110px;
+  right: 110px;
   display: flex;
   align-items: center;
   justify-content: space-between;

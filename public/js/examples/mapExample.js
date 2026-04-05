@@ -1,56 +1,74 @@
 window.MapExample = (function() {
-  let map = null;
-  let drawingLayer = null;
-  let currentPath = null;
-  let isDrawing = false;
-  let panel = null;
-  let panAnimFrame = null;
-  let phoneX = 0.5;
-  let phoneY = 0.5;
+  var map = null;
+  var drawingLayer = null;
+  var phoneMarker = null;
+  var currentPath = null;
+  var isDrawing = false;
+  var panel = null;
+  var detected = false;
+  // Normalised camera-frame position of the phone centre (0–1)
+  var phoneNX = 0.5, phoneNY = 0.5;
 
   function init(panelEl) {
     panel = panelEl;
     panel.innerHTML = '<div id="map-container" style="width:100%;height:100%;min-height:400px;"></div>';
-    map = L.map('map-container').setView([51.505, -0.09], 13);
+    map = L.map('map-container', { zoomControl: true }).setView([51.505, -0.09], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19
     }).addTo(map);
     drawingLayer = L.layerGroup().addTo(map);
-    panAnimFrame = requestAnimationFrame(panLoop);
+
+    // Custom pulsing icon for the phone marker
+    var phoneIcon = L.divIcon({
+      className: 'phone-map-icon',
+      html: '<div class="phone-dot"></div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    phoneMarker = L.marker([51.505, -0.09], { icon: phoneIcon }).addTo(map);
+    phoneMarker.bindTooltip('📱 Phone', { permanent: false });
   }
 
-  // Velocity-based panning: phone offset from centre drives pan speed
-  function panLoop() {
-    panAnimFrame = requestAnimationFrame(panLoop);
+  // Convert normalised camera position to lat/lng using the map's current bounds
+  function cameraToLatLng(nx, ny) {
+    var bounds = map.getBounds();
+    var north = bounds.getNorth(), south = bounds.getSouth();
+    var west  = bounds.getWest(),  east  = bounds.getEast();
+    return L.latLng(north - ny * (north - south), west + nx * (east - west));
+  }
+
+  function onPhonePosition(nx, ny) {
+    phoneNX = nx;
+    phoneNY = ny;
+    detected = true;
     if (!map) return;
-    const deadzone = 0.08;
-    const dx = phoneX - 0.5;
-    const dy = phoneY - 0.5;
-    if (Math.abs(dx) < deadzone && Math.abs(dy) < deadzone) return;
-    const speed = 0.00015; // degrees per frame at max offset
-    const center = map.getCenter();
-    map.panTo(
-      [center.lat - dy * speed * 60, center.lng + dx * speed * 60],
-      { animate: false }
-    );
+    var latlng = cameraToLatLng(nx, ny);
+    phoneMarker.setLatLng(latlng);
   }
 
-  function onPhonePosition(normalizedX, normalizedY) {
-    phoneX = normalizedX;
-    phoneY = normalizedY;
+  function onDetectionChange(isDetected) {
+    detected = isDetected;
+    if (phoneMarker) {
+      phoneMarker.setOpacity(isDetected ? 1 : 0.25);
+    }
   }
 
   function onPhoneTouch(data) {
     if (!map) return;
-    const containerSize = map.getContainer().getBoundingClientRect();
-    const px = data.x * containerSize.width;
-    const py = data.y * containerSize.height;
-    const latlng = map.containerPointToLatLng([px, py]);
+    var latlng;
+    if (data.lat !== undefined && data.lng !== undefined) {
+      // Phone sends lat/lng directly
+      latlng = L.latLng(data.lat, data.lng);
+    } else {
+      // Legacy: x,y within the phone's mini-map area
+      var containerSize = map.getContainer().getBoundingClientRect();
+      latlng = map.containerPointToLatLng([data.x * containerSize.width, data.y * containerSize.height]);
+    }
 
     if (data.type === 'start') {
       isDrawing = true;
-      currentPath = L.polyline([latlng], { color: '#e94560', weight: 3, opacity: 0.8 }).addTo(drawingLayer);
+      currentPath = L.polyline([latlng], { color: '#e94560', weight: 3, opacity: 0.9 }).addTo(drawingLayer);
     } else if (data.type === 'move' && isDrawing && currentPath) {
       currentPath.addLatLng(latlng);
     } else if (data.type === 'end') {
@@ -59,13 +77,38 @@ window.MapExample = (function() {
     }
   }
 
+  function getState() {
+    if (!map) return null;
+    var bounds = map.getBounds();
+    var phoneLat = null, phoneLng = null;
+    if (detected) {
+      var ll = cameraToLatLng(phoneNX, phoneNY);
+      phoneLat = ll.lat;
+      phoneLng = ll.lng;
+    }
+    return {
+      type: 'map',
+      detected: detected,
+      phoneLat: phoneLat,
+      phoneLng: phoneLng,
+      mapZoom: map.getZoom(),
+      mapBounds: {
+        north: bounds.getNorth(),
+        south: bounds.getSouth(),
+        west:  bounds.getWest(),
+        east:  bounds.getEast()
+      }
+    };
+  }
+
   function destroy() {
-    if (panAnimFrame) { cancelAnimationFrame(panAnimFrame); panAnimFrame = null; }
     if (map) { map.remove(); map = null; }
     drawingLayer = null;
     currentPath = null;
+    phoneMarker = null;
     isDrawing = false;
+    detected = false;
   }
 
-  return { init, onPhonePosition, onPhoneTouch, destroy };
+  return { init, onPhonePosition, onDetectionChange, onPhoneTouch, getState, destroy };
 })();

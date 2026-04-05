@@ -76,8 +76,9 @@
     document.getElementById('detection-status').textContent = '👁️ Webcam: error – ' + err.message;
   });
 
-  const DETECT_W = 320, DETECT_H = 240;
+  const DETECT_W = 480, DETECT_H = 360;
   let frameCount = 0;
+  let phoneDetected = false;
 
   function detectLoop() {
     requestAnimationFrame(detectLoop);
@@ -89,7 +90,7 @@
     detectionCanvas.height = DETECT_H;
     detCtx.drawImage(webcamVideo, 0, 0, DETECT_W, DETECT_H);
     const imageData = detCtx.getImageData(0, 0, DETECT_W, DETECT_H);
-    let corners = ColorDetector.detect(imageData);
+    let corners = ArucoDetector.detect(imageData);
 
     if (corners) {
       const scaleX = webcamVideo.videoWidth  / DETECT_W;
@@ -97,9 +98,17 @@
       Object.keys(corners).forEach(function(key) {
         corners[key] = { x: corners[key].x * scaleX, y: corners[key].y * scaleY };
       });
-      document.getElementById('detection-status').textContent = '👁️ Detection: tracking ✓';
-    } else {
-      document.getElementById('detection-status').textContent = '👁️ Detection: searching…';
+    }
+
+    // Notify examples when detection status changes
+    const nowDetected = corners !== null;
+    if (nowDetected !== phoneDetected) {
+      phoneDetected = nowDetected;
+      document.getElementById('detection-status').textContent =
+        phoneDetected ? '👁️ Detection: tracking ✓' : '👁️ Detection: searching…';
+      if (activeExample && activeExample.onDetectionChange) {
+        activeExample.onDetectionChange(phoneDetected);
+      }
     }
 
     drawOverlay(corners);
@@ -118,6 +127,9 @@
       if (activeExample.getState) {
         socket.emit('laptop:state', activeExample.getState());
       }
+    } else if (!corners && activeExample && activeExample.getState) {
+      // Still emit state so phone knows detection is lost
+      socket.emit('laptop:state', activeExample.getState());
     }
   }
 

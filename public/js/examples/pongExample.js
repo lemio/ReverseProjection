@@ -119,8 +119,8 @@ window.PongExample = (function() {
   }
 
   function getState() {
-    return { ball: { ...ball }, batY, aiBatY, score: { ...score } };
+    return { type: 'pong', detected: true, ball: { ...ball }, batY, aiBatY, score: { ...score } };
   }
 
-  return { init, onPhonePosition, destroy, getState };
+  return { init, onPhonePosition, onDetectionChange: function() {}, destroy, getState };
 })();

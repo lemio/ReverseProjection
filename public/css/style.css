@@ -164,6 +164,22 @@ main {
   font-size: 9px !important;
 }
 
+/* Phone position indicator on the map */
+.phone-map-icon { background: none; border: none; }
+.phone-dot {
+  width: 24px; height: 24px;
+  background: #e94560;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #e94560;
+  animation: phone-pulse 1.5s infinite;
+}
+@keyframes phone-pulse {
+  0%   { box-shadow: 0 0 0 2px rgba(233,69,96,0.8); }
+  70%  { box-shadow: 0 0 0 10px rgba(233,69,96,0); }
+  100% { box-shadow: 0 0 0 2px rgba(233,69,96,0); }
+}
+
 /* Pong canvas fills panel */
 #pong-canvas {
   display: block;
