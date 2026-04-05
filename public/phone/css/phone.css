@@ -21,27 +21,25 @@ html, body {
   overflow: hidden;
 }
 
-/* ── Corner markers ── */
-.corner-marker {
+/* ── Single centred marker — always visible at the top ── */
+#marker-single {
   position: absolute;
-  width: 110px;
-  height: 110px;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(75vw, 280px);
+  height: min(75vw, 280px);
   z-index: 100;
   pointer-events: none;
-  transition: width 0.4s ease, height 0.4s ease;
   image-rendering: pixelated;
+  transition: width 0.4s ease, height 0.4s ease;
 }
 
-/* When laptop can't find the phone: grow markers to aid detection */
-#phone-app.searching .corner-marker {
-  width: 160px;
-  height: 160px;
+/* Grow marker when laptop can't find the phone — aids re-detection */
+#phone-app.searching #marker-single {
+  width: min(90vw, 360px);
+  height: min(90vw, 360px);
 }
-
-#marker-tl { top: 0; left: 0; }
-#marker-tr { top: 0; right: 0; }
-#marker-bl { bottom: 0; left: 0; }
-#marker-br { bottom: 0; right: 0; }
 
 /* ── Connecting screen ── */
 #connecting-screen {
@@ -96,12 +94,21 @@ html, body {
   flex-direction: column;
 }
 
+/* Content sits below the single marker */
 #example-content {
   flex: 1;
-  margin: 110px;
+  margin-top: calc(min(75vw, 280px) + 8px);
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Content margin grows with the marker when searching */
+#phone-app.searching #example-content {
+  margin-top: calc(min(90vw, 360px) + 8px);
 }
 
 #example-content canvas {
@@ -113,18 +120,17 @@ html, body {
 /* ── Status bar ── */
 #status-bar {
   position: absolute;
-  bottom: 110px;
-  left: 110px;
-  right: 110px;
+  bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.3rem 0.75rem;
   background: rgba(26, 26, 26, 0.85);
-  border-radius: 6px;
+  border-top: 1px solid rgba(255,255,255,0.06);
   font-size: 0.75rem;
   z-index: 20;
-  border: 1px solid rgba(255,255,255,0.06);
 }
 
 #example-name {
@@ -151,50 +157,6 @@ html, body {
 }
 #connection-indicator.connected::before {
   background: #34d399;
-}
-
-/* ── Single-marker mode ── */
-
-#marker-single {
-  position: absolute;
-  width: 200px;
-  height: 200px;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  display: none;
-  z-index: 100;
-  pointer-events: none;
-  image-rendering: pixelated;
-  transition: width 0.4s ease, height 0.4s ease;
-}
-
-#phone-app.single-marker-mode #marker-single {
-  display: block;
-  width: min(75vw, 320px);
-  height: min(75vw, 320px);
-}
-#phone-app.searching.single-marker-mode #marker-single {
-  width: min(90vw, 400px);
-  height: min(90vw, 400px);
-}
-#phone-app.single-marker-mode .corner-marker {
-  display: none;
-}
-#phone-app.single-marker-mode #example-content {
-  margin-top: calc(min(75vw, 320px) + 4px);
-  margin-left: 0;
-  margin-right: 0;
-  margin-bottom: 0;
-}
-#phone-app.searching.single-marker-mode #example-content {
-  margin-top: calc(min(90vw, 400px) + 4px);
-}
-#phone-app.single-marker-mode #status-bar {
-  bottom: 0;
-  left: 0;
-  right: 0;
-  border-radius: 0;
 }
 
 #phone-draw-canvas {

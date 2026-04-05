@@ -13,13 +13,7 @@
 </head>
 <body>
   <div id="phone-app">
-    <!-- Four-corner 3x3 barcode markers detected by jsartoolkit5 -->
-    <canvas class="corner-marker" id="marker-tl" data-marker-id="0"></canvas>
-    <canvas class="corner-marker" id="marker-tr" data-marker-id="8"></canvas>
-    <canvas class="corner-marker" id="marker-bl" data-marker-id="40"></canvas>
-    <canvas class="corner-marker" id="marker-br" data-marker-id="56"></canvas>
-
-    <!-- Single-marker mode: one large marker at top-centre (ID 0) -->
+    <!-- Single centred 3x3 barcode marker (ID 0) detected by jsartoolkit5 -->
     <canvas id="marker-single" data-marker-id="0"></canvas>
 
     <!-- Connecting overlay — shown briefly while the socket handshakes -->
@@ -46,16 +40,10 @@
   <script src="/phone/js/examples/mapPhone.js"></script>
   <script src="/phone/js/phoneApp.js"></script>
   <script>
-    // Draw 3x3 barcode patterns onto each corner canvas
-    document.querySelectorAll('.corner-marker[data-marker-id]').forEach(function(canvas) {
-      var id = parseInt(canvas.dataset.markerId, 10);
-      drawJSARMarker(canvas, id, canvas.offsetWidth || 110);
-    });
-    // Single-marker canvas (hidden until single mode is activated)
+    // Draw the single 3x3 barcode marker onto the canvas
     (function() {
       var s = document.getElementById('marker-single');
-      var id = parseInt(s.dataset.markerId, 10);
-      drawJSARMarker(s, id, s.offsetWidth || 200);
+      drawJSARMarker(s, parseInt(s.dataset.markerId, 10), s.offsetWidth || 280);
     })();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/phone/sw.js').catch(console.error);

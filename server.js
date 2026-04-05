@@ -2,10 +2,24 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+
+/* ── LAN IP detection ─────────────────────────────────────────────────────── */
+function getLanIp() {
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+}
 
 // In-memory rate limiter: 120 HTTP requests per IP per minute across all routes
 const httpRateMap = new Map();
@@ -33,6 +47,14 @@ app.use('/phone', express.static(path.join(__dirname, 'public', 'phone')));
 
 // Serve remaining static files from public/
 app.use(express.static(path.join(__dirname, 'public')));
+
+/* ── Config endpoint — exposes the LAN phone URL ──────────────────────────── */
+app.get('/api/config', (req, res) => {
+  const lanIp = getLanIp();
+  const PORT_  = process.env.PORT || 3000;
+  const phoneUrl = lanIp ? `http://${lanIp}:${PORT_}/phone` : null;
+  res.json({ phoneUrl });
+});
 
 // All devices share one session — no room codes required.
 // Any connecting socket is a participant; laptops and phones find each other automatically.

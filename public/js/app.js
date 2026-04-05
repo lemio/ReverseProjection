@@ -21,8 +21,18 @@
     if (activeExample && activeExample.onPhoneTouch) activeExample.onPhoneTouch(data);
   });
 
-  // ── Phone link & QR code ──────────────────────────────────────────────────
-  var phoneUrl = window.location.origin + '/phone';
+  // ── Phone link & QR code — use LAN IP so phone can reach the server ───────
+  var phoneUrl = window.location.origin + '/phone'; // fallback (works on laptop)
+
+  fetch('/api/config')
+    .then(function(r) { return r.json(); })
+    .then(function(cfg) {
+      if (cfg.phoneUrl) {
+        phoneUrl = cfg.phoneUrl;
+        console.log('[App] Phone URL resolved to', phoneUrl);
+      }
+    })
+    .catch(function() { /* keep localhost fallback */ });
 
   document.getElementById('copy-link').addEventListener('click', function() {
     var btn = this;
@@ -38,10 +48,9 @@
     document.getElementById('qr-modal').classList.remove('hidden');
     document.getElementById('qr-url').textContent = phoneUrl;
     var img = document.getElementById('qr-image');
-    if (!img.src || img.src === window.location.href) {
-      img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
-        encodeURIComponent(phoneUrl);
-    }
+    // Refresh QR whenever opened in case phoneUrl resolved after last open
+    img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
+      encodeURIComponent(phoneUrl);
   });
   document.getElementById('qr-close').addEventListener('click', function() {
     document.getElementById('qr-modal').classList.add('hidden');
@@ -67,22 +76,11 @@
     if (activeExample && activeExample.setRotationEnabled) {
       activeExample.setRotationEnabled(useRotation);
     }
-    socket.emit('config:change', { example: name, detectionMode: JSARDetector.getMode() });
+    socket.emit('config:change', { example: name });
   }
 
   document.querySelectorAll('.tool-btn[data-example]').forEach(function(btn) {
     btn.addEventListener('click', function() { switchExample(btn.dataset.example); });
-  });
-
-  // ── Detection mode toggle ─────────────────────────────────────────────────
-  var modeBtn = document.getElementById('detection-mode-btn');
-  modeBtn.addEventListener('click', function() {
-    var newMode = JSARDetector.getMode() === 'four-corner' ? 'single' : 'four-corner';
-    JSARDetector.setMode(newMode);
-    modeBtn.textContent = newMode === 'single' ? 'Single Marker' : 'Four Markers';
-    modeBtn.classList.toggle('active', newMode === 'single');
-    console.log('[App] Detection mode switched to', newMode);
-    socket.emit('config:change', { example: currentExampleName, detectionMode: newMode });
   });
 
   // ── Invert toggle ─────────────────────────────────────────────────────────
@@ -118,7 +116,6 @@
 
   function setDetectionStatus(text, dotClass) {
     detectionDot.className = 'status-dot ' + dotClass;
-    // Replace only the text node (last child), preserving the dot span
     detectionLabel.lastChild.textContent = text;
   }
 
@@ -207,11 +204,10 @@
     }
 
     drawOverlay(corners, phoneNX, phoneNY,
-      activeExample && activeExample.getState ? activeExample.getState() : null,
-      JSARDetector.getMode());
+      activeExample && activeExample.getState ? activeExample.getState() : null);
   }
 
-  function drawOverlay(corners, phoneNX, phoneNY, state, detMode) {
+  function drawOverlay(corners, phoneNX, phoneNY, state) {
     if (!webcamVideo.videoWidth) return;
     var vw = webcamVideo.videoWidth;
     var vh = webcamVideo.videoHeight;
@@ -222,25 +218,18 @@
     overlayCtx.clearRect(0, 0, vw, vh);
 
     if (!corners) {
-      // Searching indicator — amber circle
+      // Searching indicator — amber dot + label
       overlayCtx.fillStyle = 'rgba(245,158,11,0.9)';
       overlayCtx.beginPath();
       overlayCtx.arc(20, 20, 7, 0, Math.PI * 2);
       overlayCtx.fill();
       overlayCtx.fillStyle = '#e2e2e2';
       overlayCtx.font = 'bold 12px monospace';
-      var modeLabel = detMode === 'single'
-        ? ('SEARCHING MARKER ' + JSARDetector.getSingleMarkerId())
-        : 'SEARCHING — FOUR MARKERS';
-      overlayCtx.fillText(modeLabel, 34, 24);
+      overlayCtx.fillText('SEARCHING MARKER', 34, 24);
       return;
     }
 
     var pts = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft];
-    var markerIds = detMode === 'single'
-      ? [JSARDetector.getSingleMarkerId(), JSARDetector.getSingleMarkerId(),
-         JSARDetector.getSingleMarkerId(), JSARDetector.getSingleMarkerId()]
-      : [0, 8, 56, 40];
 
     // Semi-transparent fill
     overlayCtx.fillStyle = 'rgba(77,124,254,0.07)';
@@ -250,7 +239,7 @@
     overlayCtx.closePath();
     overlayCtx.fill();
 
-    // Quadrilateral outline
+    // Outline
     overlayCtx.strokeStyle = '#4d7cfe';
     overlayCtx.lineWidth = 2;
     overlayCtx.beginPath();
@@ -258,25 +247,6 @@
     for (var j = 1; j < pts.length; j++) overlayCtx.lineTo(pts[j].x, pts[j].y);
     overlayCtx.closePath();
     overlayCtx.stroke();
-
-    // Corner dots + labels
-    var dotColors = ['#f87171', '#34d399', '#fbbf24', '#60a5fa'];
-    var labels    = ['TL', 'TR', 'BR', 'BL'];
-    pts.forEach(function(pt, i) {
-      overlayCtx.fillStyle = dotColors[i];
-      overlayCtx.beginPath();
-      overlayCtx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
-      overlayCtx.fill();
-      overlayCtx.strokeStyle = 'rgba(0,0,0,0.5)';
-      overlayCtx.lineWidth = 1;
-      overlayCtx.stroke();
-      overlayCtx.fillStyle = '#e2e2e2';
-      overlayCtx.font = 'bold 10px monospace';
-      overlayCtx.fillText(labels[i] + ' #' + markerIds[i], pt.x + 10, pt.y - 4);
-      overlayCtx.font = '9px monospace';
-      overlayCtx.fillStyle = '#aaa';
-      overlayCtx.fillText('(' + Math.round(pt.x) + ',' + Math.round(pt.y) + ')', pt.x + 10, pt.y + 8);
-    });
 
     // Centre crosshair
     var cx = pts.reduce(function(s, p) { return s + p.x; }, 0) / 4;
