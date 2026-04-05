@@ -50,9 +50,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 /* ── Config endpoint — exposes the LAN phone URL ──────────────────────────── */
 app.get('/api/config', (req, res) => {
-  const lanIp = getLanIp();
-  const PORT_  = process.env.PORT || 3000;
-  const phoneUrl = lanIp ? `http://${lanIp}:${PORT_}/phone` : null;
+  const lanIp   = getLanIp();
+  const port    = process.env.PORT || 3000;
+  const phoneUrl = lanIp ? `http://${lanIp}:${port}/phone` : null;
   res.json({ phoneUrl });
 });
 

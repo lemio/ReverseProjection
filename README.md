@@ -8,8 +8,8 @@ Designed for museum and gallery installations — no accounts, no configuration,
 
 ## How It Works
 
-1. The **phone** displays four ArUco fiducial markers (IDs 0 / 8 / 40 / 56) at its corners so the webcam can reliably detect it.
-2. The **laptop** accesses the webcam, detects the four markers using jsartoolkit5, computes the phone's position and rotation, and draws a live overlay on the webcam feed.
+1. The **phone** displays a single ArUco fiducial marker (ID 0) centred at the top of the screen so the webcam can detect and track it.
+2. The **laptop** accesses the webcam, detects the marker using jsartoolkit5, and derives the phone's position and rotation from the marker's four corner vertices.
 3. Both devices communicate over WebSockets (Socket.io) through a local Node.js server running on your network.
 4. The laptop map shows a bounding box representing the area currently visible on the phone's mini-map.
 5. Touching the phone screen sends lat/lng coordinates back to the laptop and draws a stroke on both maps simultaneously.
@@ -133,28 +133,27 @@ Then open `http://192.168.x.x:3000/phone` on the phone.
 
 ## Using the Application
 
-- Hold the phone face-up in front of the webcam. The four black-and-white markers at the corners allow the webcam to track position.
+- Hold the phone face-up in front of the webcam. A single black-and-white marker centred at the top of the screen allows the webcam to track position and rotation.
 - The laptop map shows a blue rectangle representing the area currently visible on the phone.
 - Touch and drag on the phone to draw annotations. They appear on both screens simultaneously.
-- Use the toolbar buttons to adjust detection mode, invert controls, or enable map rotation.
+- Use the toolbar buttons to invert controls or enable map rotation.
 
 ### Toolbar controls
 
 | Button | Description |
 |--------|-------------|
 | Map | Activates the map example (the only built-in example) |
-| Four Markers | Toggles between four-corner detection and single-marker mode |
 | Invert | Flips the phone's position mapping so moving up moves the map north |
 | No Rotation | When toggled to "Rotating", the phone's yaw rotates the mini-map |
-| Copy Phone Link | Copies the phone URL to the clipboard |
-| Show QR Code | Displays a QR code for the phone URL |
+| Copy Phone Link | Copies the LAN phone URL to the clipboard |
+| Show QR Code | Displays a QR code for the LAN phone URL |
 
 ### Lighting tips
 
-- Keep the phone screen brightness high — the markers need clear contrast.
+- Keep the phone screen brightness high — the marker needs clear contrast.
 - Avoid direct glare on the phone screen.
 - If detection is unreliable, reduce ambient light reflections.
-- When the phone is lost, the corner markers automatically grow to help re-acquisition.
+- When the phone is lost, the marker automatically grows to help re-acquisition.
 
 ---
 
@@ -167,7 +166,7 @@ public/
   css/style.css                  Dark professional theme
   js/
     app.js                       Main orchestrator (webcam loop, detection, state)
-    jsarDetector.js              Detects ArUco markers via jsartoolkit5 (IDs 0/8/40/56)
+    jsarDetector.js              Detects marker ID 0 via jsartoolkit5 — position and rotation from corners
     homography.js                Perspective-transform math (DLT algorithm)
     vendor/
       artoolkit.min.js           jsartoolkit5 self-contained bundle
@@ -189,7 +188,8 @@ public/
 
 ## Technical Notes
 
-- Detection uses **jsartoolkit5** with 3x3 barcode markers at IDs 0 (top-left), 8 (top-right), 40 (bottom-left), 56 (bottom-right).
+- Detection uses **jsartoolkit5** with a single 3x3 barcode marker (ID 0) centred at the top of the phone screen. The marker's four corners provide position and rotation.
+- The server detects the machine's LAN IP at startup and exposes it via `/api/config` so the laptop app can generate a correct phone URL for the QR code and copy-link button.
 - All devices share a single server session — no room codes or pairing required.
 - The phone mini-map renders at three zoom levels deeper than the laptop map and freezes during active drawing to keep strokes clean.
 - Drawn paths are placed in a dedicated Leaflet pane (`drawPane`) at z-index 650 with `overflow: visible` to prevent clipping at tile boundaries.
