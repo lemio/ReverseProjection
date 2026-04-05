@@ -6,12 +6,17 @@ window.MapPhone = (function() {
   var mouseDown = false;
   var sendTouch = null;
   var lastState = null;
+  var lastZoom = null;
+  var stateLogCount = 0;
 
   function init(el, sendFn) {
     sendTouch = sendFn;
-    el.innerHTML = '<div id="phone-map" style="width:100%;height:100%;"></div>';
+    el.innerHTML = '<div id="phone-map" style="width:100%;height:100%;min-height:0;flex:1;"></div>';
+    console.log('[MapPhone] init: creating Leaflet map after 80ms delay');
     // Slight delay so the container has layout dimensions
     setTimeout(function() {
+      var container = document.getElementById('phone-map');
+      console.log('[MapPhone] container size:', container.offsetWidth, 'x', container.offsetHeight);
       map = L.map('phone-map', {
         zoomControl: false,
         attributionControl: false,
@@ -28,29 +33,61 @@ window.MapPhone = (function() {
 
       drawLayer = L.layerGroup().addTo(map);
 
+      // Force Leaflet to re-measure the container after layout settles
+      map.invalidateSize();
+      console.log('[MapPhone] Leaflet map created at zoom', map.getZoom());
+
       // Touch drawing
-      var container = map.getContainer();
-      container.addEventListener('touchstart', onTouchStart, { passive: false });
-      container.addEventListener('touchmove',  onTouchMove,  { passive: false });
-      container.addEventListener('touchend',   onTouchEnd,   { passive: false });
-      container.addEventListener('mousedown',  onMouseDown);
-      container.addEventListener('mousemove',  onMouseMove);
-      container.addEventListener('mouseup',    onMouseUp);
+      var mapContainer = map.getContainer();
+      mapContainer.addEventListener('touchstart', onTouchStart, { passive: false });
+      mapContainer.addEventListener('touchmove',  onTouchMove,  { passive: false });
+      mapContainer.addEventListener('touchend',   onTouchEnd,   { passive: false });
+      mapContainer.addEventListener('mousedown',  onMouseDown);
+      mapContainer.addEventListener('mousemove',  onMouseMove);
+      mapContainer.addEventListener('mouseup',    onMouseUp);
 
       // Re-apply last received state if we got it before init
-      if (lastState) onState(lastState);
-    }, 60);
+      if (lastState) {
+        console.log('[MapPhone] Replaying lastState after init');
+        onState(lastState);
+      }
+    }, 80);
   }
 
   function onState(state) {
     lastState = state;
+    stateLogCount++;
+
+    if (stateLogCount % 30 === 1) {
+      // Log every 30th state (throttled) — always log the first one
+      console.log('[MapPhone] onState #' + stateLogCount +
+        ' | detected=' + (state && state.detected) +
+        ' | phoneLat=' + (state && state.phoneLat != null ? state.phoneLat.toFixed(5) : 'null') +
+        ' | phoneLng=' + (state && state.phoneLng != null ? state.phoneLng.toFixed(5) : 'null') +
+        ' | mapZoom=' + (state && state.mapZoom) +
+        ' | map ready=' + (map !== null));
+    }
+
     if (!map || !state) return;
     if (state.type !== 'map') return;
 
-    // Centre mini-map on phone's current geographic position
-    if (state.detected && state.phoneLat !== null && state.phoneLng !== null) {
-      var zoom = Math.min(18, (state.mapZoom || 13) + 3);
-      map.setView([state.phoneLat, state.phoneLng], zoom, { animate: true });
+    if (state.detected && state.phoneLat != null && state.phoneLng != null) {
+      var newZoom = Math.min(18, (state.mapZoom || 13) + 3);
+
+      if (stateLogCount % 30 === 1) {
+        console.log('[MapPhone] Moving map to [' + state.phoneLat.toFixed(5) + ', ' +
+          state.phoneLng.toFixed(5) + '] zoom ' + newZoom);
+      }
+
+      // Use animate:false so rapid position updates aren't lost to interrupted animations
+      if (lastZoom !== newZoom) {
+        lastZoom = newZoom;
+        map.setView([state.phoneLat, state.phoneLng], newZoom, { animate: false });
+      } else {
+        map.panTo([state.phoneLat, state.phoneLng], { animate: false });
+      }
+    } else if (!state.detected && stateLogCount % 30 === 1) {
+      console.log('[MapPhone] Phone not detected — map stays at current view');
     }
   }
 
@@ -127,12 +164,14 @@ window.MapPhone = (function() {
       map.remove();
       map = null;
     }
-    drawLayer   = null;
-    currentPath = null;
-    sendTouch   = null;
-    lastState   = null;
-    isDrawing   = false;
-    mouseDown   = false;
+    drawLayer    = null;
+    currentPath  = null;
+    sendTouch    = null;
+    lastState    = null;
+    lastZoom     = null;
+    stateLogCount = 0;
+    isDrawing    = false;
+    mouseDown    = false;
   }
 
   return { init, onState, destroy };

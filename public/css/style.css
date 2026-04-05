@@ -114,12 +114,13 @@ main {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;  /* needed so the map panel can be absolutely positioned */
 }
 
-/* ── Webcam container ── */
+/* ── Webcam container — takes full width ── */
 #webcam-container {
   position: relative;
-  flex: 0 0 70%;
+  flex: 1;             /* was flex: 0 0 70% — now takes all available space */
   background: #000;
   overflow: hidden;
 }
@@ -144,19 +145,51 @@ main {
   pointer-events: none;
 }
 
-/* ── Example panel ── */
+/* ── Example panel — overlaid on right side of camera feed ── */
 #example-panel {
-  flex: 1;
-  background: var(--surface);
-  border-left: 1px solid var(--surface2);
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 42%;
+  height: 100%;
+  background: transparent;   /* show camera through */
+  border-left: none;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  pointer-events: auto;      /* map stays interactive */
+  z-index: 5;
 }
 
-/* Map fills the panel */
+/* Map fills the panel; Leaflet container transparent so camera shows through */
 #map-container {
   flex: 1;
+  height: 100%;
+  border-left: 2px solid rgba(0,255,136,0.4);
+}
+
+/* Map overlay label */
+#map-container::before {
+  content: '🗺️ MAP OVERLAY';
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  z-index: 1000;
+  font: bold 10px monospace;
+  color: #00ff88;
+  background: rgba(0,0,0,0.55);
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Make the Leaflet map background + panes transparent so the camera shows through */
+.leaflet-container {
+  background: transparent !important;
+}
+.leaflet-map-pane,
+.leaflet-tile-pane {
+  background: transparent !important;
 }
 
 /* Leaflet attribution tweak */

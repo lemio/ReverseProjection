@@ -9,15 +9,18 @@
   var currentExample = 'map';
   var examples = { map: window.MapPhone, pong: window.PongPhone };
   var activePhoneExample = null;
+  var stateCount = 0;
 
   function connect(roomId) {
     socket = io();
 
     socket.on('connect', function() {
       socket.emit('device:register', { type: 'phone', roomId: roomId });
+      stateCount = 0;
       var indicator = document.getElementById('connection-indicator');
       indicator.className = 'connected';
       indicator.textContent = '● Live';
+      console.log('[PhoneApp] Connected to room', roomId);
     });
 
     socket.on('disconnect', function() {
@@ -31,6 +34,16 @@
     });
 
     socket.on('laptop:state', function(state) {
+      stateCount++;
+      if (stateCount % 30 === 1) {
+        console.log('[PhoneApp] laptop:state #' + stateCount +
+          ' | type=' + (state && state.type) +
+          ' | detected=' + (state && state.detected) +
+          ' | phoneLat=' + (state && state.phoneLat != null ? state.phoneLat.toFixed(5) : 'null') +
+          ' | phoneLng=' + (state && state.phoneLng != null ? state.phoneLng.toFixed(5) : 'null') +
+          ' | hasExample=' + (activePhoneExample !== null));
+      }
+
       if (activePhoneExample && activePhoneExample.onState) {
         activePhoneExample.onState(state);
       }
@@ -44,6 +57,7 @@
         } else {
           phoneApp.classList.remove('searching');
         }
+        console.log('[PhoneApp] searching class ' + (nowSearching ? 'ADDED' : 'REMOVED'));
         // Redraw markers after CSS transition completes (size changed)
         setTimeout(function() {
           document.querySelectorAll('.corner-marker[data-marker-id]').forEach(function(canvas) {

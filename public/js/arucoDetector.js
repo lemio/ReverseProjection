@@ -12,10 +12,14 @@ window.ArucoDetector = (function() {
   const ALPHA = 0.3;
   let smoothed = { topLeft: null, topRight: null, bottomLeft: null, bottomRight: null };
   let detector = null;
+  let callCount = 0;
 
   function init() {
     if (window.AR && !detector) {
       detector = new AR.Detector();
+      console.log('[ArucoDetector] AR.Detector initialized');
+    } else if (!window.AR) {
+      console.warn('[ArucoDetector] window.AR not available — js-aruco2 not loaded?');
     }
   }
 
@@ -34,6 +38,7 @@ window.ArucoDetector = (function() {
     if (!detector) init();
     if (!detector) return null;
 
+    callCount++;
     var markers = detector.detect(imageData);
     var found = {};
 
@@ -41,6 +46,32 @@ window.ArucoDetector = (function() {
       var corner = CORNER_IDS[m.id];
       if (corner) found[corner] = centerOf(m);
     });
+
+    var foundCornerNames = Object.keys(found);
+    var allCorners = ['topLeft', 'topRight', 'bottomLeft', 'bottomRight'];
+    var missingCorners = allCorners.filter(function(c) { return !found[c]; });
+
+    // Throttled logging every 30 calls (~1.5 s at 20 fps)
+    if (callCount % 30 === 1) {
+      if (markers.length === 0) {
+        console.log('[ArucoDetector] #' + callCount + ': No markers detected in frame');
+      } else {
+        var allIds = markers.map(function(m) { return m.id; });
+        var knownIds = markers.filter(function(m) { return CORNER_IDS[m.id]; }).map(function(m) { return m.id; });
+        var unknownIds = markers.filter(function(m) { return !CORNER_IDS[m.id]; }).map(function(m) { return m.id; });
+        console.log('[ArucoDetector] #' + callCount +
+          ': Detected IDs=' + JSON.stringify(allIds) +
+          ' | Mapped corners=' + JSON.stringify(foundCornerNames) +
+          (unknownIds.length ? ' | Unmapped IDs=' + JSON.stringify(unknownIds) : '') +
+          (missingCorners.length ? ' | Missing corners=' + JSON.stringify(missingCorners) : ' | ALL 4 CORNERS FOUND ✓'));
+      }
+    }
+
+    // Log partial detection more frequently (every 10 calls) when some but not all corners found
+    if (missingCorners.length > 0 && missingCorners.length < 4 && callCount % 10 === 1) {
+      console.log('[ArucoDetector] Partial: found ' + foundCornerNames.length + '/4 corners, missing: ' +
+        JSON.stringify(missingCorners));
+    }
 
     // Always smooth whatever was found this frame
     Object.keys(found).forEach(function(name) {
@@ -63,6 +94,8 @@ window.ArucoDetector = (function() {
   function reset() {
     smoothed = { topLeft: null, topRight: null, bottomLeft: null, bottomRight: null };
     detector = null;
+    callCount = 0;
+    console.log('[ArucoDetector] reset');
   }
 
   return { detect, reset, init };

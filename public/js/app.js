@@ -79,6 +79,7 @@
   const DETECT_W = 480, DETECT_H = 360;
   let frameCount = 0;
   let phoneDetected = false;
+  let stateEmitCount = 0;
 
   function detectLoop() {
     requestAnimationFrame(detectLoop);
@@ -91,6 +92,8 @@
     detCtx.drawImage(webcamVideo, 0, 0, DETECT_W, DETECT_H);
     const imageData = detCtx.getImageData(0, 0, DETECT_W, DETECT_H);
     let corners = ArucoDetector.detect(imageData);
+
+    let phoneNX = null, phoneNY = null;
 
     if (corners) {
       const scaleX = webcamVideo.videoWidth  / DETECT_W;
@@ -106,12 +109,11 @@
       phoneDetected = nowDetected;
       document.getElementById('detection-status').textContent =
         phoneDetected ? '👁️ Detection: tracking ✓' : '👁️ Detection: searching…';
+      console.log('[App] Detection status changed → ' + (phoneDetected ? 'TRACKING' : 'LOST'));
       if (activeExample && activeExample.onDetectionChange) {
         activeExample.onDetectionChange(phoneDetected);
       }
     }
-
-    drawOverlay(corners);
 
     if (corners && activeExample && activeExample.onPhonePosition) {
       const W = webcamVideo.videoWidth, H = webcamVideo.videoHeight;
@@ -122,18 +124,33 @@
       const dx = corners.topRight.x - corners.topLeft.x;
       const dy = corners.topRight.y - corners.topLeft.y;
       const rotation = Math.atan2(dy, dx);
-      activeExample.onPhonePosition(center.x / W, center.y / H, rotation);
+      phoneNX = center.x / W;
+      phoneNY = center.y / H;
+      activeExample.onPhonePosition(phoneNX, phoneNY, rotation);
 
+      stateEmitCount++;
       if (activeExample.getState) {
-        socket.emit('laptop:state', activeExample.getState());
+        const state = activeExample.getState();
+        socket.emit('laptop:state', state);
+        // Throttled log every 60 state emissions (~3 s at 20 fps)
+        if (stateEmitCount % 60 === 1) {
+          console.log('[App] State emitted #' + stateEmitCount +
+            ' | nx=' + phoneNX.toFixed(3) + ' ny=' + phoneNY.toFixed(3) +
+            ' | rot=' + rotation.toFixed(2) + 'rad' +
+            ' | phoneLat=' + (state && state.phoneLat != null ? state.phoneLat.toFixed(5) : 'null') +
+            ' | phoneLng=' + (state && state.phoneLng != null ? state.phoneLng.toFixed(5) : 'null') +
+            ' | detected=' + (state && state.detected));
+        }
       }
     } else if (!corners && activeExample && activeExample.getState) {
       // Still emit state so phone knows detection is lost
       socket.emit('laptop:state', activeExample.getState());
     }
+
+    drawOverlay(corners, phoneNX, phoneNY, activeExample && activeExample.getState ? activeExample.getState() : null);
   }
 
-  function drawOverlay(corners) {
+  function drawOverlay(corners, phoneNX, phoneNY, state) {
     // Only resize when video dimensions actually change (avoids clearing every frame).
     // Guard: skip if video hasn't started yet.
     if (!webcamVideo.videoWidth) return;
@@ -146,17 +163,31 @@
     overlayCtx.clearRect(0, 0, vw, vh);
 
     if (!corners) {
-      overlayCtx.fillStyle = 'rgba(255,0,0,0.6)';
+      // Searching indicator — red circle top-left
+      overlayCtx.fillStyle = 'rgba(255,0,0,0.8)';
       overlayCtx.beginPath();
-      overlayCtx.arc(20, 20, 8, 0, Math.PI * 2);
+      overlayCtx.arc(24, 24, 10, 0, Math.PI * 2);
       overlayCtx.fill();
+      overlayCtx.fillStyle = '#fff';
+      overlayCtx.font = 'bold 13px monospace';
+      overlayCtx.fillText('SEARCHING…', 42, 29);
       return;
     }
 
     const pts = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft];
+    // ArUco IDs for each corner (TL, TR, BR, BL)
+    const markerIds = [0, 42, 127, 85];
+
+    // Semi-transparent fill so the phone outline is visible
+    overlayCtx.fillStyle = 'rgba(0,255,128,0.08)';
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) overlayCtx.lineTo(pts[i].x, pts[i].y);
+    overlayCtx.closePath();
+    overlayCtx.fill();
 
     // Draw quadrilateral outline
-    overlayCtx.strokeStyle = '#00ff00';
+    overlayCtx.strokeStyle = '#00ff88';
     overlayCtx.lineWidth = 3;
     overlayCtx.beginPath();
     overlayCtx.moveTo(pts[0].x, pts[0].y);
@@ -164,27 +195,68 @@
     overlayCtx.closePath();
     overlayCtx.stroke();
 
-    // Corner dots + labels
+    // Corner dots + labels showing marker ID + position name
     const dotColors = ['#ff4444', '#44ff44', '#ffff44', '#4444ff'];
     const labels    = ['TL', 'TR', 'BR', 'BL'];
     pts.forEach(function(pt, i) {
       overlayCtx.fillStyle = dotColors[i];
       overlayCtx.beginPath();
-      overlayCtx.arc(pt.x, pt.y, 8, 0, Math.PI * 2);
+      overlayCtx.arc(pt.x, pt.y, 9, 0, Math.PI * 2);
       overlayCtx.fill();
+      // White border
+      overlayCtx.strokeStyle = '#fff';
+      overlayCtx.lineWidth = 1.5;
+      overlayCtx.stroke();
+      // Label: corner name + marker ID
       overlayCtx.fillStyle = '#fff';
-      overlayCtx.font = '10px sans-serif';
-      overlayCtx.fillText(labels[i], pt.x + 10, pt.y + 4);
+      overlayCtx.font = 'bold 11px monospace';
+      const label = labels[i] + ' #' + markerIds[i];
+      overlayCtx.fillText(label, pt.x + 12, pt.y - 4);
+      overlayCtx.font = '10px monospace';
+      overlayCtx.fillText('(' + Math.round(pt.x) + ',' + Math.round(pt.y) + ')', pt.x + 12, pt.y + 9);
     });
 
-    // Centre crosshair
+    // Centre crosshair + info
     const cx = pts.reduce(function(s, p) { return s + p.x; }, 0) / 4;
     const cy = pts.reduce(function(s, p) { return s + p.y; }, 0) / 4;
-    overlayCtx.strokeStyle = '#fff';
-    overlayCtx.lineWidth = 1;
+    overlayCtx.strokeStyle = '#00ff88';
+    overlayCtx.lineWidth = 1.5;
     overlayCtx.beginPath();
-    overlayCtx.moveTo(cx - 10, cy); overlayCtx.lineTo(cx + 10, cy);
-    overlayCtx.moveTo(cx, cy - 10); overlayCtx.lineTo(cx, cy + 10);
+    overlayCtx.moveTo(cx - 14, cy); overlayCtx.lineTo(cx + 14, cy);
+    overlayCtx.moveTo(cx, cy - 14); overlayCtx.lineTo(cx, cy + 14);
+    overlayCtx.stroke();
+
+    // Phone position info box
+    if (phoneNX !== null && phoneNY !== null) {
+      const lines = [
+        'nx=' + phoneNX.toFixed(3) + '  ny=' + phoneNY.toFixed(3)
+      ];
+      if (state && state.phoneLat != null) {
+        lines.push('lat=' + state.phoneLat.toFixed(5));
+        lines.push('lng=' + state.phoneLng.toFixed(5));
+      }
+      const boxX = Math.min(cx + 18, vw - 160);
+      const boxY = cy - 8;
+      const lineH = 16;
+      overlayCtx.fillStyle = 'rgba(0,0,0,0.65)';
+      overlayCtx.fillRect(boxX - 4, boxY - 14, 158, lines.length * lineH + 6);
+      overlayCtx.fillStyle = '#00ff88';
+      overlayCtx.font = 'bold 12px monospace';
+      lines.forEach(function(line, i) {
+        overlayCtx.fillText(line, boxX, boxY + i * lineH);
+      });
+    }
+
+    // Rotation indicator — small arrow from centre
+    const dx = corners.topRight.x - corners.topLeft.x;
+    const dy = corners.topRight.y - corners.topLeft.y;
+    const angle = Math.atan2(dy, dx);
+    const arrowLen = 30;
+    overlayCtx.strokeStyle = '#ffff00';
+    overlayCtx.lineWidth = 2;
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(cx, cy);
+    overlayCtx.lineTo(cx + Math.cos(angle) * arrowLen, cy + Math.sin(angle) * arrowLen);
     overlayCtx.stroke();
   }
 

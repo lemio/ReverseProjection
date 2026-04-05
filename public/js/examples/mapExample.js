@@ -8,6 +8,7 @@ window.MapExample = (function() {
   var detected = false;
   // Normalised camera-frame position of the phone centre (0–1)
   var phoneNX = 0.5, phoneNY = 0.5;
+  var positionLogCount = 0;
 
   function init(panelEl) {
     panel = panelEl;
@@ -15,7 +16,8 @@ window.MapExample = (function() {
     map = L.map('map-container', { zoomControl: true }).setView([51.505, -0.09], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
-      maxZoom: 19
+      maxZoom: 19,
+      opacity: 0.85
     }).addTo(map);
     drawingLayer = L.layerGroup().addTo(map);
 
@@ -28,6 +30,7 @@ window.MapExample = (function() {
     });
     phoneMarker = L.marker([51.505, -0.09], { icon: phoneIcon }).addTo(map);
     phoneMarker.bindTooltip('📱 Phone', { permanent: false });
+    console.log('[MapExample] Leaflet map initialized at', map.getCenter(), 'zoom', map.getZoom());
   }
 
   // Convert normalised camera position to lat/lng using the map's current bounds
@@ -45,6 +48,18 @@ window.MapExample = (function() {
     if (!map) return;
     var latlng = cameraToLatLng(nx, ny);
     phoneMarker.setLatLng(latlng);
+
+    positionLogCount++;
+    if (positionLogCount % 60 === 1) {
+      var bounds = map.getBounds();
+      console.log('[MapExample] onPhonePosition #' + positionLogCount +
+        ' | nx=' + nx.toFixed(3) + ' ny=' + ny.toFixed(3) +
+        ' → lat=' + latlng.lat.toFixed(5) + ' lng=' + latlng.lng.toFixed(5) +
+        ' | mapBounds N=' + bounds.getNorth().toFixed(4) +
+        ' S=' + bounds.getSouth().toFixed(4) +
+        ' W=' + bounds.getWest().toFixed(4) +
+        ' E=' + bounds.getEast().toFixed(4));
+    }
   }
 
   function onDetectionChange(isDetected) {
@@ -52,6 +67,7 @@ window.MapExample = (function() {
     if (phoneMarker) {
       phoneMarker.setOpacity(isDetected ? 1 : 0.25);
     }
+    console.log('[MapExample] onDetectionChange → detected=' + isDetected);
   }
 
   function onPhoneTouch(data) {
@@ -69,11 +85,13 @@ window.MapExample = (function() {
     if (data.type === 'start') {
       isDrawing = true;
       currentPath = L.polyline([latlng], { color: '#e94560', weight: 3, opacity: 0.9 }).addTo(drawingLayer);
+      console.log('[MapExample] Drawing start at lat=' + latlng.lat.toFixed(5) + ' lng=' + latlng.lng.toFixed(5));
     } else if (data.type === 'move' && isDrawing && currentPath) {
       currentPath.addLatLng(latlng);
     } else if (data.type === 'end') {
       isDrawing = false;
       currentPath = null;
+      console.log('[MapExample] Drawing end');
     }
   }
 
@@ -108,6 +126,8 @@ window.MapExample = (function() {
     phoneMarker = null;
     isDrawing = false;
     detected = false;
+    positionLogCount = 0;
+    console.log('[MapExample] destroyed');
   }
 
   return { init, onPhonePosition, onDetectionChange, onPhoneTouch, getState, destroy };
