@@ -2,6 +2,15 @@ window.ColorDetector = (function() {
   let smoothed = { topLeft: null, topRight: null, bottomLeft: null, bottomRight: null };
   const ALPHA = 0.3;
 
+  // Color-detection thresholds — tune these for your lighting conditions.
+  const MIN_BRIGHTNESS  = 80;   // minimum channel sum to ignore near-black pixels
+  const RATIO_THRESHOLD = 0.55; // dominant channel must exceed this fraction of the sum
+  const CROSS_MAX       = 120;  // non-dominant channels must stay below this value
+  const YELLOW_MIN      = 150;  // both R and G must exceed this for yellow
+  const YELLOW_BLUE_MAX = 80;   // blue channel must stay below this for yellow
+  const YELLOW_RG_RATIO = 0.75; // (R+G)/sum ratio threshold for yellow
+  const MIN_PIXEL_COUNT = 20;   // minimum matching pixels to accept a centroid
+
   function findColorCentroid(data, width, height, colorTest) {
     let sumX = 0, sumY = 0, count = 0;
     for (let y = 0; y < height; y++) {
@@ -13,15 +22,15 @@ window.ColorDetector = (function() {
         }
       }
     }
-    if (count < 20) return null;
+    if (count < MIN_PIXEL_COUNT) return null;
     return { x: sumX / count, y: sumY / count };
   }
 
   const colorTests = {
-    red:    (r, g, b) => { const s = r + g + b; return s > 80 && r / s > 0.55 && r > 80 && g < 120 && b < 120; },
-    green:  (r, g, b) => { const s = r + g + b; return s > 80 && g / s > 0.55 && g > 80 && r < 120 && b < 120; },
-    blue:   (r, g, b) => { const s = r + g + b; return s > 80 && b / s > 0.55 && b > 80 && r < 120 && g < 120; },
-    yellow: (r, g, b) => { const s = r + g + b; return r > 150 && g > 150 && b < 80 && (r + g) / s > 0.75; }
+    red:    (r, g, b) => { const s = r + g + b; return s > MIN_BRIGHTNESS && r / s > RATIO_THRESHOLD && r > MIN_BRIGHTNESS && g < CROSS_MAX && b < CROSS_MAX; },
+    green:  (r, g, b) => { const s = r + g + b; return s > MIN_BRIGHTNESS && g / s > RATIO_THRESHOLD && g > MIN_BRIGHTNESS && r < CROSS_MAX && b < CROSS_MAX; },
+    blue:   (r, g, b) => { const s = r + g + b; return s > MIN_BRIGHTNESS && b / s > RATIO_THRESHOLD && b > MIN_BRIGHTNESS && r < CROSS_MAX && g < CROSS_MAX; },
+    yellow: (r, g, b) => { const s = r + g + b; return r > YELLOW_MIN && g > YELLOW_MIN && b < YELLOW_BLUE_MAX && (r + g) / s > YELLOW_RG_RATIO; }
   };
 
   function smooth(prev, next) {

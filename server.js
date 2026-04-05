@@ -10,7 +10,7 @@ const io = new Server(server);
 // In-memory rate limiter: 120 HTTP requests per IP per minute across all routes
 const httpRateMap = new Map();
 app.use((req, res, next) => {
-  const ip  = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
+  const ip  = req.ip || (req.socket && req.socket.remoteAddress) || 'unknown';
   const now = Date.now();
   const entry = httpRateMap.get(ip) || { count: 0, resetAt: now + 60_000 };
   if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 60_000; }
@@ -22,13 +22,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Phone app route — must be declared before the static middleware
-// so the bare /phone path is handled explicitly (avoids directory redirect)
-app.get('/phone', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'phone', 'index.html'));
-});
+// Serve phone PWA files — must come before the broad public/ middleware
+// so /phone resolves to public/phone/index.html via directory index
+app.use('/phone', express.static(path.join(__dirname, 'public', 'phone')));
 
-// Serve static files from public/
+// Serve remaining static files from public/
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Track rooms: roomId -> { laptop: socketId, phone: socketId }
