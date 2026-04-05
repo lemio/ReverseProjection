@@ -9,6 +9,7 @@
   "dependencies": {
     "express": "^4.18.2",
     "js-aruco2": "^2.0.0",
+    "jsartoolkit5": "^0.0.4",
     "socket.io": "^4.7.2"
   }
 }
