@@ -89,7 +89,11 @@
     document.getElementById('detection-status').textContent = '👁️ Webcam: error – ' + err.message;
   });
 
+  // Base detection dimensions for four-corner mode.
+  // Single-marker mode uses a larger canvas so the one small marker occupies
+  // enough pixels to be reliably found by js-aruco2's candidate detector.
   const DETECT_W = 480, DETECT_H = 360;
+  const DETECT_W_SINGLE = 640, DETECT_H_SINGLE = 480;
   let frameCount = 0;
   let phoneDetected = false;
   let stateEmitCount = 0;
@@ -100,17 +104,21 @@
     if (frameCount % 3 !== 0) return;
     if (!webcamVideo.videoWidth) return;
 
-    detectionCanvas.width  = DETECT_W;
-    detectionCanvas.height = DETECT_H;
-    detCtx.drawImage(webcamVideo, 0, 0, DETECT_W, DETECT_H);
-    const imageData = detCtx.getImageData(0, 0, DETECT_W, DETECT_H);
+    const singleMode = ArucoDetector.getMode() === 'single';
+    const detectW = singleMode ? DETECT_W_SINGLE : DETECT_W;
+    const detectH = singleMode ? DETECT_H_SINGLE : DETECT_H;
+
+    detectionCanvas.width  = detectW;
+    detectionCanvas.height = detectH;
+    detCtx.drawImage(webcamVideo, 0, 0, detectW, detectH);
+    const imageData = detCtx.getImageData(0, 0, detectW, detectH);
     let corners = ArucoDetector.detect(imageData);
 
     let phoneNX = null, phoneNY = null;
 
     if (corners) {
-      const scaleX = webcamVideo.videoWidth  / DETECT_W;
-      const scaleY = webcamVideo.videoHeight / DETECT_H;
+      const scaleX = webcamVideo.videoWidth  / detectW;
+      const scaleY = webcamVideo.videoHeight / detectH;
       Object.keys(corners).forEach(function(key) {
         corners[key] = { x: corners[key].x * scaleX, y: corners[key].y * scaleY };
       });

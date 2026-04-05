@@ -182,21 +182,37 @@ html, body {
   display: none;
   z-index: 100;
   image-rendering: pixelated;
+  /* Smooth size transitions (mirrors .corner-marker searching animation) */
+  transition: width 0.4s ease, height 0.4s ease;
 }
 
 /* Activate single-marker layout */
 #phone-app.single-marker-mode #marker-single {
   display: block;
+  /* Responsive size: fill ~75 % of viewport width, capped at 320 px.
+     At typical working distances this keeps the ArUco grid ≥ 100 px in
+     the 640×480 detection canvas, well above js-aruco2's 10 px minimum. */
+  width: min(75vw, 320px);
+  height: min(75vw, 320px);
+}
+/* When the laptop can't find the phone: grow the single marker to aid detection */
+#phone-app.searching.single-marker-mode #marker-single {
+  width: min(90vw, 400px);
+  height: min(90vw, 400px);
 }
 #phone-app.single-marker-mode .corner-marker {
   display: none;
 }
 /* Shift content down past the single marker; full width */
 #phone-app.single-marker-mode #example-content {
-  margin-top: 204px;   /* marker height + 4px gap */
+  margin-top: calc(min(75vw, 320px) + 4px);
   margin-left: 0;
   margin-right: 0;
   margin-bottom: 0;
+}
+/* Content margin grows with the marker when searching */
+#phone-app.searching.single-marker-mode #example-content {
+  margin-top: calc(min(90vw, 400px) + 4px);
 }
 #phone-app.single-marker-mode #status-bar {
   bottom: 0;

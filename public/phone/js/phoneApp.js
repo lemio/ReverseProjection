@@ -30,7 +30,10 @@
     });
 
     socket.on('config:change', function(data) {
-      if (data.example) switchExample(data.example);
+      // Only reinitialise the example when it has actually changed.
+      // Switching detection mode emits the same example name; recreating the
+      // phone example every time causes a needless 80 ms map teardown/rebuild.
+      if (data.example && data.example !== currentExample) switchExample(data.example);
       if (data.detectionMode !== undefined) {
         var phoneApp = document.getElementById('phone-app');
         if (data.detectionMode === 'single') {
