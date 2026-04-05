@@ -34,20 +34,13 @@
     });
   });
 
-  var qrGenerated = false;
   document.getElementById('qr-btn').addEventListener('click', function() {
     document.getElementById('qr-modal').classList.remove('hidden');
     document.getElementById('qr-url').textContent = phoneUrl;
-    if (!qrGenerated) {
-      new QRCode(document.getElementById('qr-code'), {
-        text: phoneUrl,
-        width: 220,
-        height: 220,
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.M
-      });
-      qrGenerated = true;
+    var img = document.getElementById('qr-image');
+    if (!img.src || img.src === window.location.href) {
+      img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
+        encodeURIComponent(phoneUrl);
     }
   });
   document.getElementById('qr-close').addEventListener('click', function() {

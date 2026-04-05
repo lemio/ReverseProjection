@@ -1,10 +1,9 @@
-const CACHE_NAME = 'revproj-phone-v1';
+const CACHE_NAME = 'revproj-phone-v2';
 const URLS_TO_CACHE = [
   '/phone',
   '/phone/css/phone.css',
   '/phone/js/phoneApp.js',
   '/phone/js/examples/mapPhone.js',
-  '/phone/js/examples/pongPhone.js',
   '/phone/manifest.json'
 ];
 

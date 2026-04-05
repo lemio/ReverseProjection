@@ -72,11 +72,12 @@ window.MapExample = (function() {
 
     positionLogCount++;
     if (positionLogCount % 60 === 1) {
+      var center = cameraToLatLng(nx, ny);
       var bounds = map.getBounds();
       console.log('[MapExample] onPhonePosition #' + positionLogCount +
         ' | nx=' + nx.toFixed(3) + ' ny=' + ny.toFixed(3) +
         ' rot=' + (rotation || 0).toFixed(2) +
-        ' → lat=' + latlng.lat.toFixed(5) + ' lng=' + latlng.lng.toFixed(5) +
+        ' → lat=' + center.lat.toFixed(5) + ' lng=' + center.lng.toFixed(5) +
         ' | mapBounds N=' + bounds.getNorth().toFixed(4) +
         ' S=' + bounds.getSouth().toFixed(4) +
         ' W=' + bounds.getWest().toFixed(4) +

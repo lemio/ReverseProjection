@@ -51,14 +51,15 @@
         <span class="modal-title">Scan to connect phone</span>
         <button class="modal-close" id="qr-close">Close</button>
       </div>
-      <div id="qr-code"></div>
+      <div id="qr-code">
+        <img id="qr-image" src="" alt="QR Code" width="220" height="220">
+      </div>
       <p id="qr-url"></p>
     </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <!-- jsartoolkit5: complete bundle (asm.js engine + ARController API) -->
   <script src="/js/vendor/artoolkit.min.js"></script>
   <!-- ReverseProjection detection & examples -->
