@@ -21,10 +21,11 @@ window.MapPhone = (function() {
   var lastState = null;
   var lastZoom = null;
   var stateLogCount = 0;
+  var resizeHandler = null;
 
   function init(el, sendFn) {
     sendTouch = sendFn;
-    el.innerHTML = '<div id="phone-map" style="width:100%;height:100%;min-height:0;flex:1;"></div>';
+    el.innerHTML = '<div id="phone-map" style="width:100%;min-height:0;flex:1;"></div>';
     console.log('[MapPhone] init: creating Leaflet map after 80ms delay');
     // Slight delay so the container has layout dimensions
     setTimeout(function() {
@@ -57,6 +58,10 @@ window.MapPhone = (function() {
       map.invalidateSize();
       console.log('[MapPhone] Leaflet map created at zoom', map.getZoom());
 
+      // Re-measure whenever the window resizes (e.g. orientation change)
+      resizeHandler = function() { if (map) map.invalidateSize(); };
+      window.addEventListener('resize', resizeHandler);
+
       // Touch drawing
       var mapContainer = map.getContainer();
       mapContainer.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -72,6 +77,10 @@ window.MapPhone = (function() {
         onState(lastState);
       }
     }, 80);
+  }
+
+  function invalidate() {
+    if (map) map.invalidateSize();
   }
 
   function onState(state) {
@@ -188,6 +197,10 @@ window.MapPhone = (function() {
   }
 
   function destroy() {
+    if (resizeHandler) {
+      window.removeEventListener('resize', resizeHandler);
+      resizeHandler = null;
+    }
     if (map) {
       var container = map.getContainer();
       container.removeEventListener('touchstart', onTouchStart);
@@ -209,5 +222,5 @@ window.MapPhone = (function() {
     mouseDown    = false;
   }
 
-  return { init, onState, destroy };
+  return { init, onState, invalidate, destroy };
 })();

@@ -94,9 +94,13 @@ html, body {
   flex-direction: column;
 }
 
-/* Content sits below the single marker */
+/* Content sits below the single marker.
+   Margin is fixed — the marker grows visually (overlapping the map) when
+   searching, but the map container height never changes so Leaflet's
+   internal pixel↔coordinate mapping stays valid at all times. */
 #example-content {
   flex: 1;
+  min-height: 0;
   margin-top: calc(min(75vw, 280px) + 8px);
   margin-left: 0;
   margin-right: 0;
@@ -104,17 +108,6 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-/* Content margin grows with the marker when searching */
-#phone-app.searching #example-content {
-  margin-top: calc(min(90vw, 360px) + 8px);
-}
-
-#example-content canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 /* ── Status bar ── */

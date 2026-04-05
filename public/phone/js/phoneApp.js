@@ -56,6 +56,10 @@
         console.log('[PhoneApp] searching ' + (nowSearching ? 'ON' : 'OFF'));
         // Redraw marker after CSS transition finishes (size changed)
         setTimeout(redrawMarker, 450);
+        // Notify the active example that its container may have changed size
+        if (activePhoneExample && activePhoneExample.invalidate) {
+          setTimeout(function() { activePhoneExample.invalidate(); }, 450);
+        }
       }
     });
   }
