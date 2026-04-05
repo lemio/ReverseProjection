@@ -1,8 +1,11 @@
 # ReverseProjection
 
+https://github.com/user-attachments/assets/a6412d3c-7fa5-45ee-bcbf-cd02b953df7a
+
+
 A live augmented-reality application that turns a webcam into a position sensor: hold your phone in front of the camera and an interactive map appears, perfectly aligned with your physical location. Touch the phone screen to draw annotations that appear on both the phone and the large display simultaneously.
 
-Designed for museum and gallery installations — no accounts, no configuration, no room codes. Anyone who opens the phone page connects automatically.
+Anyone who opens the phone page connects automatically.
 
 ---
 
