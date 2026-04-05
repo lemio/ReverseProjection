@@ -38,8 +38,10 @@ window.MapExample = (function() {
 
     // Custom pane for drawn paths — z-index 650 keeps them above tiles (200)
     // and the default overlayPane (400) at all times.
+    // overflow:visible prevents Leaflet's default clip from cutting strokes at the pane edge.
     map.createPane('drawPane');
     map.getPane('drawPane').style.zIndex = 650;
+    map.getPane('drawPane').style.overflow = 'visible';
 
     // Custom pulsing icon for the phone marker
     var phoneIcon = L.divIcon({

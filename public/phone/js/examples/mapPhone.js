@@ -48,8 +48,10 @@ window.MapPhone = (function() {
 
       // Custom pane for drawn paths — z-index 650 keeps them above tiles (200)
       // and the default overlayPane (400) at all times, including after rotation.
+      // overflow:visible prevents Leaflet's default clip from cutting strokes at the pane edge.
       map.createPane('drawPane');
       map.getPane('drawPane').style.zIndex = 650;
+      map.getPane('drawPane').style.overflow = 'visible';
 
       // Force Leaflet to re-measure the container after layout settles
       map.invalidateSize();
@@ -98,12 +100,16 @@ window.MapPhone = (function() {
           state.phoneLng.toFixed(5) + '] zoom ' + newZoom);
       }
 
-      // Use animate:false so rapid position updates aren't lost to interrupted animations
-      if (lastZoom !== newZoom) {
-        lastZoom = newZoom;
-        map.setView([state.phoneLat, state.phoneLng], newZoom, { animate: false });
-      } else {
-        map.panTo([state.phoneLat, state.phoneLng], { animate: false });
+      // Don't pan/zoom while the user is actively drawing — it would shift the canvas
+      // under their finger and produce jagged strokes.
+      if (!isDrawing && !mouseDown) {
+        // Use animate:false so rapid position updates aren't lost to interrupted animations
+        if (lastZoom !== newZoom) {
+          lastZoom = newZoom;
+          map.setView([state.phoneLat, state.phoneLng], newZoom, { animate: false });
+        } else {
+          map.panTo([state.phoneLat, state.phoneLng], { animate: false });
+        }
       }
     } else if (!state.detected && stateLogCount % 30 === 1) {
       console.log('[MapPhone] Phone not detected — map stays at current view');
