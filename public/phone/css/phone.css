@@ -29,8 +29,6 @@ html, body {
   z-index: 100;
   /* Smooth growth animation when phone is not detected */
   transition: width 0.4s ease, height 0.4s ease;
-  /* White halo so the black marker border pops on any background */
-  outline: 4px solid #fff;
   image-rendering: pixelated;
 }
 
@@ -183,7 +181,6 @@ html, body {
   transform: translateX(-50%);
   display: none;
   z-index: 100;
-  outline: 4px solid #fff;
   image-rendering: pixelated;
 }
 
@@ -196,7 +193,7 @@ html, body {
 }
 /* Shift content down past the single marker; full width */
 #phone-app.single-marker-mode #example-content {
-  margin-top: 208px;   /* marker height + 4px outline + 4px gap */
+  margin-top: 204px;   /* marker height + 4px gap */
   margin-left: 0;
   margin-right: 0;
   margin-bottom: 0;
