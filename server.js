@@ -7,24 +7,24 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Simple in-memory rate limiter for the phone route (max 60 req/min per IP)
-const phoneRateMap = new Map();
-function phoneRateLimit(req, res, next) {
-  const ip  = req.ip || req.connection.remoteAddress || 'unknown';
+// In-memory rate limiter: 120 HTTP requests per IP per minute across all routes
+const httpRateMap = new Map();
+app.use((req, res, next) => {
+  const ip  = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
   const now = Date.now();
-  const entry = phoneRateMap.get(ip) || { count: 0, resetAt: now + 60_000 };
+  const entry = httpRateMap.get(ip) || { count: 0, resetAt: now + 60_000 };
   if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 60_000; }
   entry.count++;
-  phoneRateMap.set(ip, entry);
-  if (entry.count > 60) {
+  httpRateMap.set(ip, entry);
+  if (entry.count > 120) {
     return res.status(429).send('Too Many Requests');
   }
   next();
-}
+});
 
 // Phone app route — must be declared before the static middleware
 // so the bare /phone path is handled explicitly (avoids directory redirect)
-app.get('/phone', phoneRateLimit, (req, res) => {
+app.get('/phone', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'phone', 'index.html'));
 });
 
