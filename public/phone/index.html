@@ -6,14 +6,14 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>ReverseProjection Phone</title>
+  <title>ReverseProjection</title>
   <link rel="manifest" href="/phone/manifest.json">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/phone/css/phone.css">
 </head>
 <body>
   <div id="phone-app">
-    <!-- Four-corner 3×3 barcode markers (IDs used by jsartoolkit5 detector) -->
+    <!-- Four-corner 3x3 barcode markers detected by jsartoolkit5 -->
     <canvas class="corner-marker" id="marker-tl" data-marker-id="0"></canvas>
     <canvas class="corner-marker" id="marker-tr" data-marker-id="8"></canvas>
     <canvas class="corner-marker" id="marker-bl" data-marker-id="40"></canvas>
@@ -22,12 +22,11 @@
     <!-- Single-marker mode: one large marker at top-centre (ID 0) -->
     <canvas id="marker-single" data-marker-id="0"></canvas>
 
-    <div id="connection-screen">
+    <!-- Connecting overlay — shown briefly while the socket handshakes -->
+    <div id="connecting-screen">
       <div class="connect-card">
-        <h2>🎯 ReverseProjection</h2>
-        <p>Enter the room code shown on the laptop:</p>
-        <input id="room-input" type="text" placeholder="Room Code" maxlength="6" autocapitalize="characters">
-        <button id="join-btn">Join Room</button>
+        <div class="connect-spinner"></div>
+        <p>Connecting...</p>
         <p id="connect-status"></p>
       </div>
     </div>
@@ -36,7 +35,7 @@
       <div id="example-content"></div>
       <div id="status-bar">
         <span id="example-name">Map</span>
-        <span id="connection-indicator" class="connected">● Live</span>
+        <span id="connection-indicator" class="connected">Live</span>
       </div>
     </div>
   </div>
@@ -45,10 +44,9 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/phone/js/drawMarker.js"></script>
   <script src="/phone/js/examples/mapPhone.js"></script>
-  <script src="/phone/js/examples/pongPhone.js"></script>
   <script src="/phone/js/phoneApp.js"></script>
   <script>
-    // Draw 3×3 barcode patterns onto each corner canvas (no external library needed)
+    // Draw 3x3 barcode patterns onto each corner canvas
     document.querySelectorAll('.corner-marker[data-marker-id]').forEach(function(canvas) {
       var id = parseInt(canvas.dataset.markerId, 10);
       drawJSARMarker(canvas, id, canvas.offsetWidth || 110);

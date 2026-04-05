@@ -34,52 +34,34 @@ app.use('/phone', express.static(path.join(__dirname, 'public', 'phone')));
 // Serve remaining static files from public/
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Track rooms: roomId -> { laptop: socketId, phone: socketId }
-const rooms = new Map();
+// All devices share one session — no room codes required.
+// Any connecting socket is a participant; laptops and phones find each other automatically.
+const ROOM = 'main';
 
 io.on('connection', (socket) => {
-  let myRoom = null;
   let myType = null;
 
-  socket.on('device:register', ({ type, roomId }) => {
-    myRoom = roomId;
+  socket.on('device:register', ({ type }) => {
     myType = type;
-    socket.join(roomId);
+    socket.join(ROOM);
 
-    if (!rooms.has(roomId)) rooms.set(roomId, {});
-    rooms.get(roomId)[type] = socket.id;
+    // Notify others that a new device joined
+    socket.to(ROOM).emit('device:status', { type, connected: true });
 
-    // Notify the room
-    socket.to(roomId).emit('device:status', { type, connected: true });
-    // Also tell the registering device about existing connections
-    const room = rooms.get(roomId);
+    // Tell the newcomer about every device already in the room
     const otherType = type === 'laptop' ? 'phone' : 'laptop';
-    if (room[otherType]) {
+    const roomSockets = io.sockets.adapter.rooms.get(ROOM);
+    if (roomSockets && roomSockets.size > 1) {
       socket.emit('device:status', { type: otherType, connected: true });
     }
   });
 
-  socket.on('phone:touch', (data) => {
-    if (myRoom) socket.to(myRoom).emit('phone:touch', data);
-  });
-
-  socket.on('laptop:state', (data) => {
-    if (myRoom) socket.to(myRoom).emit('laptop:state', data);
-  });
-
-  socket.on('config:change', (data) => {
-    if (myRoom) socket.to(myRoom).emit('config:change', data);
-  });
+  socket.on('phone:touch',   (data) => { socket.to(ROOM).emit('phone:touch',   data); });
+  socket.on('laptop:state',  (data) => { socket.to(ROOM).emit('laptop:state',  data); });
+  socket.on('config:change', (data) => { socket.to(ROOM).emit('config:change', data); });
 
   socket.on('disconnect', () => {
-    if (myRoom && myType) {
-      const room = rooms.get(myRoom);
-      if (room) {
-        delete room[myType];
-        if (!room.laptop && !room.phone) rooms.delete(myRoom);
-      }
-      socket.to(myRoom).emit('device:status', { type: myType, connected: false });
-    }
+    if (myType) socket.to(ROOM).emit('device:status', { type: myType, connected: false });
   });
 });
 

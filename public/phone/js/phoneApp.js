@@ -1,52 +1,45 @@
 (function() {
-  function getRoomCodeFromUrl() {
-    var params = new URLSearchParams(window.location.search);
-    return params.get('room');
-  }
-
-  var urlRoom = getRoomCodeFromUrl();
   var socket = null;
   var currentExample = 'map';
-  var examples = { map: window.MapPhone, pong: window.PongPhone };
+  var examples = { map: window.MapPhone };
   var activePhoneExample = null;
   var stateCount = 0;
 
-  function connect(roomId) {
+  function connect() {
     socket = io();
 
     socket.on('connect', function() {
-      socket.emit('device:register', { type: 'phone', roomId: roomId });
+      // All devices share one session — no room code required
+      socket.emit('device:register', { type: 'phone' });
       stateCount = 0;
+      document.getElementById('connecting-screen').style.display = 'none';
+      document.getElementById('example-area').style.display = 'flex';
       var indicator = document.getElementById('connection-indicator');
       indicator.className = 'connected';
-      indicator.textContent = '● Live';
-      console.log('[PhoneApp] Connected to room', roomId);
+      indicator.textContent = 'Live';
+      console.log('[PhoneApp] Connected');
+      switchExample(currentExample);
     });
 
     socket.on('disconnect', function() {
       var indicator = document.getElementById('connection-indicator');
       indicator.className = '';
-      indicator.textContent = '○ Disconnected';
+      indicator.textContent = 'Disconnected';
     });
 
     socket.on('config:change', function(data) {
-      // Only reinitialise the example when it has actually changed.
-      // Switching detection mode emits the same example name; recreating the
-      // phone example every time causes a needless 80 ms map teardown/rebuild.
       if (data.example && data.example !== currentExample) switchExample(data.example);
       if (data.detectionMode !== undefined) {
         var phoneApp = document.getElementById('phone-app');
         if (data.detectionMode === 'single') {
           phoneApp.classList.add('single-marker-mode');
           phoneApp.classList.remove('four-corner-mode');
-          // Redraw single marker at its new rendered size
           var s = document.getElementById('marker-single');
           if (s) drawJSARMarker(s, parseInt(s.dataset.markerId, 10), s.offsetWidth || 200);
           console.log('[PhoneApp] Switched to single-marker mode');
         } else {
           phoneApp.classList.remove('single-marker-mode');
           phoneApp.classList.add('four-corner-mode');
-          // Redraw corner markers at their rendered size
           document.querySelectorAll('.corner-marker[data-marker-id]').forEach(function(canvas) {
             drawJSARMarker(canvas, parseInt(canvas.dataset.markerId, 10), canvas.offsetWidth || 110);
           });
@@ -61,8 +54,6 @@
         console.log('[PhoneApp] laptop:state #' + stateCount +
           ' | type=' + (state && state.type) +
           ' | detected=' + (state && state.detected) +
-          ' | phoneLat=' + (state && state.phoneLat != null ? state.phoneLat.toFixed(5) : 'null') +
-          ' | phoneLng=' + (state && state.phoneLng != null ? state.phoneLng.toFixed(5) : 'null') +
           ' | hasExample=' + (activePhoneExample !== null));
       }
 
@@ -80,10 +71,9 @@
           phoneApp.classList.remove('searching');
         }
         console.log('[PhoneApp] searching class ' + (nowSearching ? 'ADDED' : 'REMOVED'));
-        // Redraw markers after CSS transition completes (size changed)
         setTimeout(function() {
-          var phoneApp = document.getElementById('phone-app');
-          if (phoneApp.classList.contains('single-marker-mode')) {
+          var app = document.getElementById('phone-app');
+          if (app.classList.contains('single-marker-mode')) {
             var s = document.getElementById('marker-single');
             if (s) drawJSARMarker(s, parseInt(s.dataset.markerId, 10), s.offsetWidth || 200);
           } else {
@@ -92,19 +82,14 @@
               drawJSARMarker(canvas, id, canvas.offsetWidth);
             });
           }
-        }, 450); // slightly longer than the 0.4s CSS transition
+        }, 450);
       }
     });
-
-    // Show example area
-    document.getElementById('connection-screen').style.display = 'none';
-    document.getElementById('example-area').style.display = 'flex';
-    switchExample(currentExample);
   }
 
   function switchExample(name) {
     currentExample = name;
-    document.getElementById('example-name').textContent = name === 'map' ? '🗺️ Map' : '🏓 Pong';
+    document.getElementById('example-name').textContent = name === 'map' ? 'Map' : name;
     if (activePhoneExample && activePhoneExample.destroy) activePhoneExample.destroy();
     activePhoneExample = examples[name] || null;
     var contentEl = document.getElementById('example-content');
@@ -115,22 +100,6 @@
     }
   }
 
-  if (urlRoom) {
-    connect(urlRoom);
-  } else {
-    document.getElementById('connection-screen').style.display = 'flex';
-
-    document.getElementById('join-btn').addEventListener('click', function() {
-      var roomId = document.getElementById('room-input').value.trim().toUpperCase();
-      if (roomId.length >= 4) {
-        connect(roomId);
-      } else {
-        document.getElementById('connect-status').textContent = 'Please enter a valid room code';
-      }
-    });
-
-    document.getElementById('room-input').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') document.getElementById('join-btn').click();
-    });
-  }
+  // Auto-connect immediately — no room code needed
+  connect();
 })();

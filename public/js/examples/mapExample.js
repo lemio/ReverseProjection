@@ -14,7 +14,7 @@ window.MapExample = (function() {
 
   var map = null;
   var drawingLayer = null;
-  var phoneMarker = null;
+  var phoneViewRect = null;    // L.rectangle showing the phone's visible map area
   var currentPath = null;
   var isDrawing = false;
   var panel = null;
@@ -43,15 +43,6 @@ window.MapExample = (function() {
     map.getPane('drawPane').style.zIndex = 650;
     map.getPane('drawPane').style.overflow = 'visible';
 
-    // Custom pulsing icon for the phone marker
-    var phoneIcon = L.divIcon({
-      className: 'phone-map-icon',
-      html: '<div class="phone-dot"></div>',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
-    });
-    phoneMarker = L.marker([51.505, -0.09], { icon: phoneIcon }).addTo(map);
-    phoneMarker.bindTooltip('📱 Phone', { permanent: false });
     console.log('[MapExample] Leaflet map initialized at', map.getCenter(), 'zoom', map.getZoom());
   }
 
@@ -75,8 +66,9 @@ window.MapExample = (function() {
     phoneRotation = rotation || 0;
     detected = true;
     if (!map) return;
-    var latlng = cameraToLatLng(nx, ny);
-    phoneMarker.setLatLng(latlng);
+
+    // Draw / update the bounding box showing the phone's visible map area
+    updatePhoneViewRect();
 
     positionLogCount++;
     if (positionLogCount % 60 === 1) {
@@ -94,10 +86,41 @@ window.MapExample = (function() {
 
   function onDetectionChange(isDetected) {
     detected = isDetected;
-    if (phoneMarker) {
-      phoneMarker.setOpacity(isDetected ? 1 : 0.25);
+    if (!isDetected && phoneViewRect) {
+      phoneViewRect.setStyle({ opacity: 0.25, fillOpacity: 0.03 });
+    } else if (isDetected && phoneViewRect) {
+      phoneViewRect.setStyle({ opacity: 1, fillOpacity: 0.06 });
     }
     console.log('[MapExample] onDetectionChange → detected=' + isDetected);
+  }
+
+  // Calculate and draw the rectangle representing the phone's visible map area.
+  // The phone renders its mini-map at (mapZoom + 3) centred on the phone's lat/lng.
+  // A representative phone viewport of 200 x 400 px is used for the calculation.
+  function updatePhoneViewRect() {
+    var center = cameraToLatLng(phoneNX, phoneNY);
+    var phoneZoom = Math.min(18, map.getZoom() + 3);
+    var halfW = 100; // half of representative phone viewport width in px
+    var halfH = 200; // half of representative phone viewport height in px
+    var centerPx = map.project(center, phoneZoom);
+    var sw = map.unproject(L.point(centerPx.x - halfW, centerPx.y + halfH), phoneZoom);
+    var ne = map.unproject(L.point(centerPx.x + halfW, centerPx.y - halfH), phoneZoom);
+    var bounds = L.latLngBounds(sw, ne);
+
+    if (!phoneViewRect) {
+      phoneViewRect = L.rectangle(bounds, {
+        color: '#4d7cfe',
+        weight: 2,
+        fill: true,
+        fillColor: '#4d7cfe',
+        fillOpacity: 0.06,
+        dashArray: '6 4',
+        interactive: false
+      }).addTo(map);
+      phoneViewRect.bindTooltip('Phone viewport', { permanent: false, direction: 'top' });
+    } else {
+      phoneViewRect.setBounds(bounds);
+    }
   }
 
   function onPhoneTouch(data) {
@@ -162,7 +185,7 @@ window.MapExample = (function() {
     if (map) { map.remove(); map = null; }
     drawingLayer = null;
     currentPath = null;
-    phoneMarker = null;
+    phoneViewRect = null;
     isDrawing = false;
     detected = false;
     positionLogCount = 0;

@@ -8,9 +8,9 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #1a1a2e;
-  color: #fff;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #0f0f0f;
+  color: #e2e2e2;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
 /* ── Root container ── */
@@ -27,11 +27,7 @@ html, body {
   width: 110px;
   height: 110px;
   z-index: 100;
-  /* Markers are purely visual overlays for the laptop webcam to detect.
-     pointer-events: none lets touch events pass through to the map below,
-     fixing the bug where touches on the right side of the map were blocked. */
   pointer-events: none;
-  /* Smooth growth animation when phone is not detected */
   transition: width 0.4s ease, height 0.4s ease;
   image-rendering: pixelated;
 }
@@ -47,77 +43,48 @@ html, body {
 #marker-bl { bottom: 0; left: 0; }
 #marker-br { bottom: 0; right: 0; }
 
-/* ── Connection screen ── */
-#connection-screen {
+/* ── Connecting screen ── */
+#connecting-screen {
   position: absolute;
   inset: 0;
   z-index: 50;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(26, 26, 46, 0.95);
+  background: #0f0f0f;
   padding: 1rem;
 }
 
 .connect-card {
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 16px;
-  padding: 2rem 1.5rem;
-  max-width: 360px;
-  width: 100%;
-  text-align: center;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 1rem;
 }
 
-.connect-card h2 {
-  font-size: 1.4rem;
-  color: #e94560;
+.connect-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #2a2a2a;
+  border-top-color: #4d7cfe;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .connect-card p {
   font-size: 0.9rem;
-  color: #aaa;
-  line-height: 1.5;
+  color: #888;
 }
-
-#room-input {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  border: 2px solid #0f3460;
-  background: #1a1a2e;
-  color: #fff;
-  font-size: 1.4rem;
-  text-align: center;
-  letter-spacing: 0.15em;
-  font-family: monospace;
-  outline: none;
-}
-#room-input:focus {
-  border-color: #e94560;
-}
-
-#join-btn {
-  width: 100%;
-  padding: 0.8rem;
-  border-radius: 8px;
-  border: none;
-  background: #e94560;
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-#join-btn:active { opacity: 0.8; }
 
 #connect-status {
   font-size: 0.8rem;
-  color: #e94560;
+  color: #f87171;
   min-height: 1.2em;
+  text-align: center;
 }
 
 /* ── Example area ── */
@@ -131,7 +98,6 @@ html, body {
 
 #example-content {
   flex: 1;
-  /* Space inset from the 110 px corner markers */
   margin: 110px;
   display: flex;
   flex-direction: column;
@@ -147,35 +113,48 @@ html, body {
 /* ── Status bar ── */
 #status-bar {
   position: absolute;
-  bottom: 110px;      /* just above the bottom markers */
+  bottom: 110px;
   left: 110px;
   right: 110px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.3rem 0.75rem;
-  background: rgba(22, 33, 62, 0.85);
-  border-radius: 8px;
-  font-size: 0.8rem;
+  background: rgba(26, 26, 26, 0.85);
+  border-radius: 6px;
+  font-size: 0.75rem;
   z-index: 20;
+  border: 1px solid rgba(255,255,255,0.06);
 }
 
 #example-name {
   font-weight: 600;
-  color: #eaeaea;
+  color: #e2e2e2;
 }
 
 #connection-indicator {
-  font-size: 0.75rem;
-  color: #aaa;
+  font-size: 0.72rem;
+  color: #666;
+}
+#connection-indicator::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #444;
+  margin-right: 5px;
+  vertical-align: middle;
 }
 #connection-indicator.connected {
-  color: #00ff00;
+  color: #34d399;
+}
+#connection-indicator.connected::before {
+  background: #34d399;
 }
 
 /* ── Single-marker mode ── */
 
-/* The single marker: large, centered at the top, hidden by default */
 #marker-single {
   position: absolute;
   width: 200px;
@@ -185,24 +164,16 @@ html, body {
   transform: translateX(-50%);
   display: none;
   z-index: 100;
-  /* Purely visual overlay for webcam detection — touches must pass through
-     to the example content (map/pong) rendered below this element. */
   pointer-events: none;
   image-rendering: pixelated;
-  /* Smooth size transitions (mirrors .corner-marker searching animation) */
   transition: width 0.4s ease, height 0.4s ease;
 }
 
-/* Activate single-marker layout */
 #phone-app.single-marker-mode #marker-single {
   display: block;
-  /* Responsive size: fill ~75 % of viewport width, capped at 320 px.
-     At typical working distances this keeps the ArUco grid ≥ 100 px in
-     the 640×480 detection canvas, well above js-aruco2's 10 px minimum. */
   width: min(75vw, 320px);
   height: min(75vw, 320px);
 }
-/* When the laptop can't find the phone: grow the single marker to aid detection */
 #phone-app.searching.single-marker-mode #marker-single {
   width: min(90vw, 400px);
   height: min(90vw, 400px);
@@ -210,14 +181,12 @@ html, body {
 #phone-app.single-marker-mode .corner-marker {
   display: none;
 }
-/* Shift content down past the single marker; full width */
 #phone-app.single-marker-mode #example-content {
   margin-top: calc(min(75vw, 320px) + 4px);
   margin-left: 0;
   margin-right: 0;
   margin-bottom: 0;
 }
-/* Content margin grows with the marker when searching */
 #phone-app.searching.single-marker-mode #example-content {
   margin-top: calc(min(90vw, 400px) + 4px);
 }
@@ -226,15 +195,6 @@ html, body {
   left: 0;
   right: 0;
   border-radius: 0;
-}
-.map-hint, .pong-hint {
-  position: absolute;
-  bottom: 0.5rem;
-  width: 100%;
-  text-align: center;
-  font-size: 0.75rem;
-  color: rgba(255,255,255,0.5);
-  pointer-events: none;
 }
 
 #phone-draw-canvas {
@@ -245,8 +205,12 @@ html, body {
   cursor: crosshair;
 }
 
-#pong-phone-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
+/* Leaflet map inside the phone */
+.leaflet-container {
+  background: transparent !important;
+}
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  background: rgba(0,0,0,0.45) !important;
+  color: #777 !important;
 }

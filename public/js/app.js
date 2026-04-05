@@ -1,23 +1,19 @@
 (function() {
-  function generateRoomId() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let id = '';
-    for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
-    return id;
-  }
-
-  let roomId = localStorage.getItem('rpRoomId') || generateRoomId();
-  localStorage.setItem('rpRoomId', roomId);
-  document.getElementById('room-id').textContent = roomId;
-
-  // ── Socket.io ──────────────────────────────────────────────────────────────
+  // ── Socket.io — auto-join the shared session ──────────────────────────────
   const socket = io();
-  socket.emit('device:register', { type: 'laptop', roomId });
+  socket.emit('device:register', { type: 'laptop' });
 
   socket.on('device:status', function(data) {
     if (data.type === 'phone') {
-      document.getElementById('phone-status').textContent =
-        data.connected ? '📱 Phone: connected ✓' : '📱 Phone: not connected';
+      var dot = document.querySelector('#phone-status .status-dot');
+      var label = document.getElementById('phone-status');
+      if (data.connected) {
+        dot.className = 'status-dot connected';
+        label.lastChild.textContent = 'Phone Connected';
+      } else {
+        dot.className = 'status-dot';
+        label.lastChild.textContent = 'Phone';
+      }
     }
   });
 
@@ -25,73 +21,93 @@
     if (activeExample && activeExample.onPhoneTouch) activeExample.onPhoneTouch(data);
   });
 
-  // ── Copy phone link ────────────────────────────────────────────────────────
+  // ── Phone link & QR code ──────────────────────────────────────────────────
+  var phoneUrl = window.location.origin + '/phone';
+
   document.getElementById('copy-link').addEventListener('click', function() {
-    const url = `${window.location.origin}/phone?room=${roomId}`;
-    navigator.clipboard.writeText(url).then(() => {
-      this.textContent = 'Copied!';
-      setTimeout(() => { this.textContent = 'Copy Phone Link'; }, 2000);
-    }).catch(() => {
-      prompt('Copy this link:', url);
+    var btn = this;
+    navigator.clipboard.writeText(phoneUrl).then(function() {
+      btn.textContent = 'Copied!';
+      setTimeout(function() { btn.textContent = 'Copy Phone Link'; }, 2000);
+    }).catch(function() {
+      prompt('Copy this link:', phoneUrl);
     });
   });
 
-  // ── Example switching ──────────────────────────────────────────────────────
-  let activeExample = null;
-  let currentExampleName = 'map';
-  const examples = { map: window.MapExample, pong: window.PongExample };
-  const panelEl = document.getElementById('example-panel');
+  var qrGenerated = false;
+  document.getElementById('qr-btn').addEventListener('click', function() {
+    document.getElementById('qr-modal').classList.remove('hidden');
+    document.getElementById('qr-url').textContent = phoneUrl;
+    if (!qrGenerated) {
+      new QRCode(document.getElementById('qr-code'), {
+        text: phoneUrl,
+        width: 220,
+        height: 220,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      qrGenerated = true;
+    }
+  });
+  document.getElementById('qr-close').addEventListener('click', function() {
+    document.getElementById('qr-modal').classList.add('hidden');
+  });
+  document.getElementById('qr-backdrop').addEventListener('click', function() {
+    document.getElementById('qr-modal').classList.add('hidden');
+  });
+
+  // ── Example switching ─────────────────────────────────────────────────────
+  var activeExample = null;
+  var currentExampleName = 'map';
+  var examples = { map: window.MapExample };
+  var panelEl = document.getElementById('example-panel');
 
   function switchExample(name) {
     if (activeExample && activeExample.destroy) activeExample.destroy();
-    document.querySelectorAll('.example-btn').forEach(function(b) {
+    document.querySelectorAll('.tool-btn[data-example]').forEach(function(b) {
       b.classList.toggle('active', b.dataset.example === name);
     });
     currentExampleName = name;
     activeExample = examples[name] || null;
     if (activeExample && activeExample.init) activeExample.init(panelEl);
-    // Propagate rotation state to freshly-initialised example
     if (activeExample && activeExample.setRotationEnabled) {
       activeExample.setRotationEnabled(useRotation);
     }
     socket.emit('config:change', { example: name, detectionMode: JSARDetector.getMode() });
   }
 
-  document.querySelectorAll('.example-btn').forEach(function(btn) {
+  document.querySelectorAll('.tool-btn[data-example]').forEach(function(btn) {
     btn.addEventListener('click', function() { switchExample(btn.dataset.example); });
   });
 
-  // ── Detection mode toggle ──────────────────────────────────────────────────
-  const modeBtn = document.getElementById('detection-mode-btn');
+  // ── Detection mode toggle ─────────────────────────────────────────────────
+  var modeBtn = document.getElementById('detection-mode-btn');
   modeBtn.addEventListener('click', function() {
-    const newMode = JSARDetector.getMode() === 'four-corner' ? 'single' : 'four-corner';
+    var newMode = JSARDetector.getMode() === 'four-corner' ? 'single' : 'four-corner';
     JSARDetector.setMode(newMode);
-    modeBtn.textContent = newMode === 'single' ? '🎯 Single marker' : '🎯 4-corner';
+    modeBtn.textContent = newMode === 'single' ? 'Single Marker' : 'Four Markers';
     modeBtn.classList.toggle('active', newMode === 'single');
     console.log('[App] Detection mode switched to', newMode);
     socket.emit('config:change', { example: currentExampleName, detectionMode: newMode });
   });
 
-  // ── Invert controls toggle ─────────────────────────────────────────────────
-  // When inverted, moving the phone up moves the map up (natural direction).
-  // Without inversion the camera y-axis is preserved (top-of-frame = north).
-  let invertControls = false;
-  const invertBtn = document.getElementById('invert-btn');
+  // ── Invert toggle ─────────────────────────────────────────────────────────
+  var invertControls = false;
+  var invertBtn = document.getElementById('invert-btn');
   invertBtn.addEventListener('click', function() {
     invertControls = !invertControls;
-    invertBtn.textContent = invertControls ? '↕️ Inverted ✓' : '↕️ Invert';
+    invertBtn.textContent = invertControls ? 'Inverted' : 'Invert';
     invertBtn.classList.toggle('active', invertControls);
     console.log('[App] invertControls =', invertControls);
   });
 
-  // ── Rotation toggle ────────────────────────────────────────────────────────
-  // When enabled, phone rotation (yaw in camera plane) is forwarded to the
-  // phone's mini-map so the map rotates with the phone.
-  let useRotation = false;
-  const rotateBtn = document.getElementById('rotate-btn');
+  // ── Rotation toggle ───────────────────────────────────────────────────────
+  var useRotation = false;
+  var rotateBtn = document.getElementById('rotate-btn');
   rotateBtn.addEventListener('click', function() {
     useRotation = !useRotation;
-    rotateBtn.textContent = useRotation ? '🔄 Rotating ✓' : '🔄 No rotation';
+    rotateBtn.textContent = useRotation ? 'Rotating' : 'No Rotation';
     rotateBtn.classList.toggle('active', useRotation);
     if (activeExample && activeExample.setRotationEnabled) {
       activeExample.setRotationEnabled(useRotation);
@@ -99,10 +115,19 @@
     console.log('[App] useRotation =', useRotation);
   });
 
-  // ── Webcam ─────────────────────────────────────────────────────────────────
-  const webcamVideo     = document.getElementById('webcam');
-  const overlayCanvas   = document.getElementById('overlay-canvas');
-  const overlayCtx      = overlayCanvas.getContext('2d');
+  // ── Webcam ────────────────────────────────────────────────────────────────
+  var webcamVideo   = document.getElementById('webcam');
+  var overlayCanvas = document.getElementById('overlay-canvas');
+  var overlayCtx    = overlayCanvas.getContext('2d');
+
+  var detectionDot   = document.querySelector('#detection-status .status-dot');
+  var detectionLabel = document.getElementById('detection-status');
+
+  function setDetectionStatus(text, dotClass) {
+    detectionDot.className = 'status-dot ' + dotClass;
+    // Replace only the text node (last child), preserving the dot span
+    detectionLabel.lastChild.textContent = text;
+  }
 
   navigator.mediaDevices.getUserMedia({
     video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' }
@@ -111,21 +136,19 @@
     webcamVideo.onloadedmetadata = function() {
       overlayCanvas.width  = webcamVideo.videoWidth;
       overlayCanvas.height = webcamVideo.videoHeight;
-      document.getElementById('detection-status').textContent = '👁️ Detection: searching…';
-      // Kick-start jsartoolkit5 async initialisation
+      setDetectionStatus('Searching', 'searching');
       JSARDetector.init();
       detectLoop();
     };
   }).catch(function(err) {
-    document.getElementById('detection-status').textContent = '👁️ Webcam: error – ' + err.message;
+    setDetectionStatus('Webcam error', 'error');
+    console.error('[App] Webcam error:', err.message);
   });
 
-  // jsartoolkit5 uses an internal 640×480 canvas; all returned coordinates are
-  // in that space and must be scaled up to the native video resolution here.
-  const DETECT_W = 640, DETECT_H = 480;
-  let frameCount = 0;
-  let phoneDetected = false;
-  let stateEmitCount = 0;
+  var DETECT_W = 640, DETECT_H = 480;
+  var frameCount = 0;
+  var phoneDetected = false;
+  var stateEmitCount = 0;
 
   function detectLoop() {
     requestAnimationFrame(detectLoop);
@@ -133,43 +156,41 @@
     if (frameCount % 3 !== 0) return;
     if (!webcamVideo.videoWidth) return;
 
-    // JSARDetector handles its own internal canvas; just pass the video element
-    let corners = JSARDetector.detect(webcamVideo);
-
-    let phoneNX = null, phoneNY = null;
+    var corners = JSARDetector.detect(webcamVideo);
+    var phoneNX = null, phoneNY = null;
 
     if (corners) {
-      // Scale from jsartoolkit5 detection resolution to native video resolution
-      const scaleX = webcamVideo.videoWidth  / DETECT_W;
-      const scaleY = webcamVideo.videoHeight / DETECT_H;
+      var scaleX = webcamVideo.videoWidth  / DETECT_W;
+      var scaleY = webcamVideo.videoHeight / DETECT_H;
       Object.keys(corners).forEach(function(key) {
         corners[key] = { x: corners[key].x * scaleX, y: corners[key].y * scaleY };
       });
     }
 
-    // Notify examples when detection status changes
-    const nowDetected = corners !== null;
+    var nowDetected = corners !== null;
     if (nowDetected !== phoneDetected) {
       phoneDetected = nowDetected;
-      document.getElementById('detection-status').textContent =
-        phoneDetected ? '👁️ Detection: tracking ✓' : '👁️ Detection: searching…';
-      console.log('[App] Detection status changed → ' + (phoneDetected ? 'TRACKING' : 'LOST'));
+      if (phoneDetected) {
+        setDetectionStatus('Tracking', 'tracking');
+      } else {
+        setDetectionStatus('Searching', 'searching');
+      }
+      console.log('[App] Detection status changed to ' + (phoneDetected ? 'TRACKING' : 'LOST'));
       if (activeExample && activeExample.onDetectionChange) {
         activeExample.onDetectionChange(phoneDetected);
       }
     }
 
     if (corners && activeExample && activeExample.onPhonePosition) {
-      const W = webcamVideo.videoWidth, H = webcamVideo.videoHeight;
-      const center = {
+      var W = webcamVideo.videoWidth, H = webcamVideo.videoHeight;
+      var center = {
         x: (corners.topLeft.x + corners.topRight.x + corners.bottomLeft.x + corners.bottomRight.x) / 4,
         y: (corners.topLeft.y + corners.topRight.y + corners.bottomLeft.y + corners.bottomRight.y) / 4
       };
-      const dx = corners.topRight.x - corners.topLeft.x;
-      const dy = corners.topRight.y - corners.topLeft.y;
-      const rotation = Math.atan2(dy, dx);
+      var dx = corners.topRight.x - corners.topLeft.x;
+      var dy = corners.topRight.y - corners.topLeft.y;
+      var rotation = Math.atan2(dy, dx);
 
-      // Apply invert: flip X and Y so "phone up → map up" (natural direction)
       phoneNX = invertControls ? 1 - center.x / W : center.x / W;
       phoneNY = invertControls ? 1 - center.y / H : center.y / H;
 
@@ -177,21 +198,18 @@
 
       stateEmitCount++;
       if (activeExample.getState) {
-        const state = activeExample.getState();
+        var state = activeExample.getState();
         socket.emit('laptop:state', state);
-        // Throttled log every 60 state emissions (~3 s at 20 fps)
         if (stateEmitCount % 60 === 1) {
           console.log('[App] State emitted #' + stateEmitCount +
             ' | nx=' + phoneNX.toFixed(3) + ' ny=' + phoneNY.toFixed(3) +
             ' | rot=' + rotation.toFixed(2) + 'rad' +
             ' | inverted=' + invertControls +
             ' | phoneLat=' + (state && state.phoneLat != null ? state.phoneLat.toFixed(5) : 'null') +
-            ' | phoneLng=' + (state && state.phoneLng != null ? state.phoneLng.toFixed(5) : 'null') +
             ' | detected=' + (state && state.detected));
         }
       }
     } else if (!corners && activeExample && activeExample.getState) {
-      // Still emit state so phone knows detection is lost
       socket.emit('laptop:state', activeExample.getState());
     }
 
@@ -201,10 +219,9 @@
   }
 
   function drawOverlay(corners, phoneNX, phoneNY, state, detMode) {
-    // Only resize when video dimensions actually change
     if (!webcamVideo.videoWidth) return;
-    const vw = webcamVideo.videoWidth;
-    const vh = webcamVideo.videoHeight;
+    var vw = webcamVideo.videoWidth;
+    var vh = webcamVideo.videoHeight;
     if (overlayCanvas.width !== vw || overlayCanvas.height !== vh) {
       overlayCanvas.width  = vw;
       overlayCanvas.height = vh;
@@ -212,101 +229,98 @@
     overlayCtx.clearRect(0, 0, vw, vh);
 
     if (!corners) {
-      // Searching indicator — red circle top-left
-      overlayCtx.fillStyle = 'rgba(255,0,0,0.8)';
+      // Searching indicator — amber circle
+      overlayCtx.fillStyle = 'rgba(245,158,11,0.9)';
       overlayCtx.beginPath();
-      overlayCtx.arc(24, 24, 10, 0, Math.PI * 2);
+      overlayCtx.arc(20, 20, 7, 0, Math.PI * 2);
       overlayCtx.fill();
-      overlayCtx.fillStyle = '#fff';
-      overlayCtx.font = 'bold 13px monospace';
-      const modeLabel = detMode === 'single'
-        ? ('SEARCHING ID ' + JSARDetector.getSingleMarkerId() + '…')
-        : 'SEARCHING 4-CORNER…';
-      overlayCtx.fillText(modeLabel, 42, 29);
+      overlayCtx.fillStyle = '#e2e2e2';
+      overlayCtx.font = 'bold 12px monospace';
+      var modeLabel = detMode === 'single'
+        ? ('SEARCHING MARKER ' + JSARDetector.getSingleMarkerId())
+        : 'SEARCHING — FOUR MARKERS';
+      overlayCtx.fillText(modeLabel, 34, 24);
       return;
     }
 
-    const pts = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft];
-    // Show barcode IDs matching the 3×3 corner markers on the phone
-    const markerIds = detMode === 'single'
+    var pts = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft];
+    var markerIds = detMode === 'single'
       ? [JSARDetector.getSingleMarkerId(), JSARDetector.getSingleMarkerId(),
          JSARDetector.getSingleMarkerId(), JSARDetector.getSingleMarkerId()]
       : [0, 8, 56, 40];
 
     // Semi-transparent fill
-    overlayCtx.fillStyle = 'rgba(0,255,128,0.08)';
+    overlayCtx.fillStyle = 'rgba(77,124,254,0.07)';
     overlayCtx.beginPath();
     overlayCtx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) overlayCtx.lineTo(pts[i].x, pts[i].y);
+    for (var i = 1; i < pts.length; i++) overlayCtx.lineTo(pts[i].x, pts[i].y);
     overlayCtx.closePath();
     overlayCtx.fill();
 
     // Quadrilateral outline
-    overlayCtx.strokeStyle = '#00ff88';
-    overlayCtx.lineWidth = 3;
+    overlayCtx.strokeStyle = '#4d7cfe';
+    overlayCtx.lineWidth = 2;
     overlayCtx.beginPath();
     overlayCtx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) overlayCtx.lineTo(pts[i].x, pts[i].y);
+    for (var j = 1; j < pts.length; j++) overlayCtx.lineTo(pts[j].x, pts[j].y);
     overlayCtx.closePath();
     overlayCtx.stroke();
 
     // Corner dots + labels
-    const dotColors = ['#ff4444', '#44ff44', '#ffff44', '#4444ff'];
-    const labels    = ['TL', 'TR', 'BR', 'BL'];
+    var dotColors = ['#f87171', '#34d399', '#fbbf24', '#60a5fa'];
+    var labels    = ['TL', 'TR', 'BR', 'BL'];
     pts.forEach(function(pt, i) {
       overlayCtx.fillStyle = dotColors[i];
       overlayCtx.beginPath();
-      overlayCtx.arc(pt.x, pt.y, 9, 0, Math.PI * 2);
+      overlayCtx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
       overlayCtx.fill();
-      overlayCtx.strokeStyle = '#fff';
-      overlayCtx.lineWidth = 1.5;
+      overlayCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+      overlayCtx.lineWidth = 1;
       overlayCtx.stroke();
-      overlayCtx.fillStyle = '#fff';
-      overlayCtx.font = 'bold 11px monospace';
-      const label = labels[i] + ' #' + markerIds[i];
-      overlayCtx.fillText(label, pt.x + 12, pt.y - 4);
-      overlayCtx.font = '10px monospace';
-      overlayCtx.fillText('(' + Math.round(pt.x) + ',' + Math.round(pt.y) + ')', pt.x + 12, pt.y + 9);
+      overlayCtx.fillStyle = '#e2e2e2';
+      overlayCtx.font = 'bold 10px monospace';
+      overlayCtx.fillText(labels[i] + ' #' + markerIds[i], pt.x + 10, pt.y - 4);
+      overlayCtx.font = '9px monospace';
+      overlayCtx.fillStyle = '#aaa';
+      overlayCtx.fillText('(' + Math.round(pt.x) + ',' + Math.round(pt.y) + ')', pt.x + 10, pt.y + 8);
     });
 
-    // Centre crosshair + info
-    const cx = pts.reduce(function(s, p) { return s + p.x; }, 0) / 4;
-    const cy = pts.reduce(function(s, p) { return s + p.y; }, 0) / 4;
-    overlayCtx.strokeStyle = '#00ff88';
+    // Centre crosshair
+    var cx = pts.reduce(function(s, p) { return s + p.x; }, 0) / 4;
+    var cy = pts.reduce(function(s, p) { return s + p.y; }, 0) / 4;
+    overlayCtx.strokeStyle = '#4d7cfe';
     overlayCtx.lineWidth = 1.5;
     overlayCtx.beginPath();
-    overlayCtx.moveTo(cx - 14, cy); overlayCtx.lineTo(cx + 14, cy);
-    overlayCtx.moveTo(cx, cy - 14); overlayCtx.lineTo(cx, cy + 14);
+    overlayCtx.moveTo(cx - 12, cy); overlayCtx.lineTo(cx + 12, cy);
+    overlayCtx.moveTo(cx, cy - 12); overlayCtx.lineTo(cx, cy + 12);
     overlayCtx.stroke();
 
-    // Phone position info box
+    // Info box
     if (phoneNX !== null && phoneNY !== null) {
-      const lines = [
-        'nx=' + phoneNX.toFixed(3) + '  ny=' + phoneNY.toFixed(3)
-      ];
+      var lines = ['nx=' + phoneNX.toFixed(3) + '  ny=' + phoneNY.toFixed(3)];
       if (state && state.phoneLat != null) {
         lines.push('lat=' + state.phoneLat.toFixed(5));
         lines.push('lng=' + state.phoneLng.toFixed(5));
       }
-      if (invertControls) lines.push('[INVERTED]');
-      const boxX = Math.min(cx + 18, vw - 160);
-      const boxY = cy - 8;
-      const lineH = 16;
-      overlayCtx.fillStyle = 'rgba(0,0,0,0.65)';
-      overlayCtx.fillRect(boxX - 4, boxY - 14, 158, lines.length * lineH + 6);
-      overlayCtx.fillStyle = '#00ff88';
-      overlayCtx.font = 'bold 12px monospace';
+      if (invertControls) lines.push('INVERTED');
+      var boxX = Math.min(cx + 16, vw - 160);
+      var boxY = cy - 8;
+      var lineH = 15;
+      overlayCtx.fillStyle = 'rgba(0,0,0,0.6)';
+      overlayCtx.fillRect(boxX - 4, boxY - 13, 155, lines.length * lineH + 6);
+      overlayCtx.fillStyle = '#4d7cfe';
+      overlayCtx.font = 'bold 11px monospace';
       lines.forEach(function(line, i) {
         overlayCtx.fillText(line, boxX, boxY + i * lineH);
       });
     }
 
-    // Rotation indicator — small yellow arrow from centre
-    const dx = corners.topRight.x - corners.topLeft.x;
-    const dy = corners.topRight.y - corners.topLeft.y;
-    const angle = Math.atan2(dy, dx);
-    const arrowLen = 30;
-    overlayCtx.strokeStyle = '#ffff00';
+    // Rotation arrow
+    var adx = corners.topRight.x - corners.topLeft.x;
+    var ady = corners.topRight.y - corners.topLeft.y;
+    var angle = Math.atan2(ady, adx);
+    var arrowLen = 28;
+    overlayCtx.strokeStyle = '#fbbf24';
     overlayCtx.lineWidth = 2;
     overlayCtx.beginPath();
     overlayCtx.moveTo(cx, cy);

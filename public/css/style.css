@@ -5,20 +5,27 @@
 }
 
 :root {
-  --bg: #1a1a2e;
-  --surface: #16213e;
-  --surface2: #0f3460;
-  --accent: #e94560;
-  --text: #eaeaea;
-  --text-muted: #8a8a9a;
-  --green: #00ff88;
+  --bg: #0f0f0f;
+  --surface-1: #1a1a1a;
+  --surface-2: #222222;
+  --surface-3: #2a2a2a;
+  --border: #2e2e2e;
+  --border-bright: #3a3a3a;
+  --accent: #4d7cfe;
+  --accent-red: #e84560;
+  --text: #e2e2e2;
+  --text-muted: #888888;
+  --text-dim: #555555;
+  --green: #34d399;
+  --red: #f87171;
 }
 
 html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
   overflow: hidden;
 }
 
@@ -28,99 +35,143 @@ html, body {
   height: 100vh;
 }
 
-/* ── Header ── */
+/* ── Header / toolbar ── */
 header {
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0.5rem 1rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--surface2);
+  padding: 0 1rem;
+  height: 44px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-header h1 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--accent);
+#brand {
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
   white-space: nowrap;
+  padding-right: 1rem;
+  border-right: 1px solid var(--border);
 }
 
-#controls {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-  flex: 1;
-}
-
-#room-info {
+#toolbar {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  flex: 1;
 }
 
-#room-id {
-  font-family: monospace;
-  font-weight: bold;
-  color: var(--text);
-  letter-spacing: 0.1em;
-}
-
-#example-selector {
+#tool-group {
   display: flex;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border-bright);
+  margin: 0 6px;
+}
+
+#connection-group {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
 }
 
 #status {
   display: flex;
   gap: 1rem;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  margin-left: auto;
+  padding-left: 1rem;
+  border-left: 1px solid var(--border);
 }
 
 /* ── Buttons ── */
 button {
   cursor: pointer;
-  border: none;
-  border-radius: 6px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  transition: background 0.15s, opacity 0.15s;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 0 10px;
+  height: 28px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  white-space: nowrap;
 }
 
-#copy-link {
-  background: var(--surface2);
+.tool-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
+.tool-btn:hover {
+  background: var(--surface-3);
   color: var(--text);
 }
-#copy-link:hover { opacity: 0.85; }
+.tool-btn.active {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--border-bright);
+}
 
-.example-btn {
-  background: var(--surface2);
-  color: var(--text-muted);
+#copy-link, #qr-btn {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--border-bright);
 }
-.example-btn.active {
+#copy-link:hover, #qr-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--border-bright);
+}
+#qr-btn {
   background: var(--accent);
+  border-color: transparent;
   color: #fff;
+  font-weight: 600;
 }
-.example-btn:hover:not(.active) { opacity: 0.8; }
+#qr-btn:hover { opacity: 0.88; }
+
+/* ── Status indicators ── */
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.status-dot.connected  { background: var(--green); }
+.status-dot.tracking   { background: var(--green); }
+.status-dot.error      { background: var(--red); }
+.status-dot.searching  { background: #f59e0b; }
 
 /* ── Main layout ── */
 main {
   display: flex;
   flex: 1;
   overflow: hidden;
-  position: relative;  /* needed so the map panel can be absolutely positioned */
+  position: relative;
 }
 
-/* ── Webcam container — takes full width ── */
+/* ── Webcam container ── */
 #webcam-container {
   position: relative;
-  flex: 1;             /* was flex: 0 0 70% — now takes all available space */
+  flex: 1;
   background: #000;
   overflow: hidden;
 }
@@ -152,38 +203,38 @@ main {
   right: 0;
   width: 42%;
   height: 100%;
-  background: transparent;   /* show camera through */
-  border-left: none;
+  background: transparent;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  pointer-events: auto;      /* map stays interactive */
+  pointer-events: auto;
   z-index: 5;
 }
 
-/* Map fills the panel; Leaflet container transparent so camera shows through */
+/* Map fills the panel */
 #map-container {
   flex: 1;
   height: 100%;
-  border-left: 2px solid rgba(0,255,136,0.4);
+  border-left: 1px solid rgba(77,124,254,0.3);
 }
 
-/* Map overlay label */
+/* Map overlay corner label */
 #map-container::before {
-  content: '🗺️ MAP OVERLAY';
+  content: 'MAP OVERLAY';
   position: absolute;
   top: 6px;
   left: 8px;
   z-index: 1000;
-  font: bold 10px monospace;
-  color: #00ff88;
-  background: rgba(0,0,0,0.55);
-  padding: 2px 6px;
-  border-radius: 4px;
+  font: 600 9px/1 'Inter', 'Segoe UI', sans-serif;
+  letter-spacing: 0.08em;
+  color: rgba(77,124,254,0.9);
+  background: rgba(0,0,0,0.6);
+  padding: 3px 7px;
+  border-radius: 3px;
   pointer-events: none;
 }
 
-/* Make the Leaflet map background + panes transparent so the camera shows through */
+/* Make the Leaflet map background transparent so the camera shows through */
 .leaflet-container {
   background: transparent !important;
 }
@@ -192,32 +243,84 @@ main {
   background: transparent !important;
 }
 
-/* Leaflet attribution tweak */
 .leaflet-control-attribution {
   font-size: 9px !important;
+  background: rgba(0,0,0,0.5) !important;
+  color: #888 !important;
 }
 
-/* Phone position indicator on the map */
-.phone-map-icon { background: none; border: none; }
-.phone-dot {
-  width: 24px; height: 24px;
-  background: #e94560;
-  border: 3px solid #fff;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px #e94560;
-  animation: phone-pulse 1.5s infinite;
-}
-@keyframes phone-pulse {
-  0%   { box-shadow: 0 0 0 2px rgba(233,69,96,0.8); }
-  70%  { box-shadow: 0 0 0 10px rgba(233,69,96,0); }
-  100% { box-shadow: 0 0 0 2px rgba(233,69,96,0); }
+/* Phone viewport bounding box on the map */
+.phone-viewport-box {
+  /* Controlled via Leaflet rectangle options — no CSS needed */
 }
 
-/* Pong canvas fills panel */
-#pong-canvas {
-  display: block;
+/* ── QR code modal ── */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal.hidden { display: none; }
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.72);
+}
+
+.modal-box {
+  position: relative;
+  background: var(--surface-1);
+  border: 1px solid var(--border-bright);
+  border-radius: 10px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  min-width: 260px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+}
+
+.modal-header {
   width: 100%;
-  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.modal-close {
+  background: var(--surface-3);
+  color: var(--text-muted);
+  border-color: var(--border);
+  font-size: 0.75rem;
+  padding: 0 10px;
+  height: 26px;
+}
+.modal-close:hover { color: var(--text); }
+
+#qr-code {
+  background: #fff;
+  padding: 10px;
+  border-radius: 6px;
+}
+#qr-code canvas, #qr-code img { display: block; }
+
+#qr-url {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  word-break: break-all;
+  text-align: center;
+  max-width: 240px;
 }
 
 /* ── Responsive ── */
@@ -227,6 +330,6 @@ main {
   main { flex-direction: column; }
   #webcam-container { flex: none; width: 100%; aspect-ratio: 4/3; }
   #example-panel { flex: none; height: 300px; }
-  header { flex-wrap: wrap; }
-  #status { margin-left: 0; }
+  header { flex-wrap: wrap; height: auto; padding: 0.5rem 1rem; }
+  #status { border-left: none; padding-left: 0; }
 }

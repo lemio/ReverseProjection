@@ -9,22 +9,26 @@
 <body>
   <div id="app">
     <header>
-      <h1>ReverseProjection</h1>
-      <div id="controls">
-        <div id="room-info">
-          Room: <span id="room-id">--</span>
-          <button id="copy-link">Copy Phone Link</button>
+      <div id="brand">ReverseProjection</div>
+      <div id="toolbar">
+        <div id="tool-group">
+          <button class="tool-btn active" data-example="map">Map</button>
+          <div class="toolbar-sep"></div>
+          <button class="tool-btn" id="detection-mode-btn">Four Markers</button>
+          <button class="tool-btn" id="invert-btn">Invert</button>
+          <button class="tool-btn" id="rotate-btn">No Rotation</button>
         </div>
-        <div id="example-selector">
-          <button class="example-btn active" data-example="map">🗺️ Map</button>
-          <button class="example-btn" data-example="pong">🏓 Pong</button>
-          <button class="example-btn" id="detection-mode-btn">🎯 4-corner</button>
-          <button class="example-btn" id="invert-btn">↕️ Invert</button>
-          <button class="example-btn" id="rotate-btn">🔄 No rotation</button>
+        <div id="connection-group">
+          <button id="copy-link">Copy Phone Link</button>
+          <button id="qr-btn">Show QR Code</button>
         </div>
         <div id="status">
-          <span id="phone-status">📱 Phone: not connected</span>
-          <span id="detection-status">👁️ Detection: initialising…</span>
+          <span class="status-item" id="phone-status">
+            <span class="status-dot"></span>Phone
+          </span>
+          <span class="status-item" id="detection-status">
+            <span class="status-dot"></span>Initialising
+          </span>
         </div>
       </div>
     </header>
@@ -38,15 +42,29 @@
       </div>
     </main>
   </div>
+
+  <!-- QR code modal -->
+  <div id="qr-modal" class="modal hidden">
+    <div class="modal-backdrop" id="qr-backdrop"></div>
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">Scan to connect phone</span>
+        <button class="modal-close" id="qr-close">Close</button>
+      </div>
+      <div id="qr-code"></div>
+      <p id="qr-url"></p>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <!-- jsartoolkit5: complete bundle (asm.js engine + ARController API) -->
   <script src="/js/vendor/artoolkit.min.js"></script>
   <!-- ReverseProjection detection & examples -->
   <script src="/js/jsarDetector.js"></script>
   <script src="/js/homography.js"></script>
   <script src="/js/examples/mapExample.js"></script>
-  <script src="/js/examples/pongExample.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>
