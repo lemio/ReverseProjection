@@ -22,8 +22,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve phone PWA files — must come before the broad public/ middleware
-// so /phone resolves to public/phone/index.html via directory index
+// Serve the phone PWA index for both /phone and /phone/
+app.get(['/phone', '/phone/'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'phone', 'index.html'));
+});
+
+// Serve other phone static assets (/phone/css, /phone/js, /phone/manifest.json, etc.)
 app.use('/phone', express.static(path.join(__dirname, 'public', 'phone')));
 
 // Serve remaining static files from public/

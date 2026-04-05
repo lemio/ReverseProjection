@@ -119,8 +119,13 @@
   }
 
   function drawOverlay(corners) {
-    overlayCanvas.width  = webcamVideo.videoWidth  || overlayCanvas.width;
-    overlayCanvas.height = webcamVideo.videoHeight || overlayCanvas.height;
+    // Only resize when video dimensions actually change (avoids clearing every frame)
+    const vw = webcamVideo.videoWidth  || overlayCanvas.width;
+    const vh = webcamVideo.videoHeight || overlayCanvas.height;
+    if (overlayCanvas.width !== vw || overlayCanvas.height !== vh) {
+      overlayCanvas.width  = vw;
+      overlayCanvas.height = vh;
+    }
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
     if (!corners) {

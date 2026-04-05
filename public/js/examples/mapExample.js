@@ -4,7 +4,9 @@ window.MapExample = (function() {
   let currentPath = null;
   let isDrawing = false;
   let panel = null;
-  let lastPanTime = 0;
+  let panAnimFrame = null;
+  let phoneX = 0.5;
+  let phoneY = 0.5;
 
   function init(panelEl) {
     panel = panelEl;
@@ -15,17 +17,28 @@ window.MapExample = (function() {
       maxZoom: 19
     }).addTo(map);
     drawingLayer = L.layerGroup().addTo(map);
+    panAnimFrame = requestAnimationFrame(panLoop);
+  }
+
+  // Velocity-based panning: phone offset from centre drives pan speed
+  function panLoop() {
+    panAnimFrame = requestAnimationFrame(panLoop);
+    if (!map) return;
+    const deadzone = 0.08;
+    const dx = phoneX - 0.5;
+    const dy = phoneY - 0.5;
+    if (Math.abs(dx) < deadzone && Math.abs(dy) < deadzone) return;
+    const speed = 0.00015; // degrees per frame at max offset
+    const center = map.getCenter();
+    map.panTo(
+      [center.lat - dy * speed * 60, center.lng + dx * speed * 60],
+      { animate: false }
+    );
   }
 
   function onPhonePosition(normalizedX, normalizedY) {
-    if (!map) return;
-    const now = Date.now();
-    if (now - lastPanTime < 100) return;
-    lastPanTime = now;
-    const offsetX = (normalizedX - 0.5) * 0.5;
-    const offsetY = (normalizedY - 0.5) * 0.5;
-    const center = map.getCenter();
-    map.panTo([center.lat - offsetY * 5, center.lng + offsetX * 5], { animate: false });
+    phoneX = normalizedX;
+    phoneY = normalizedY;
   }
 
   function onPhoneTouch(data) {
@@ -47,6 +60,7 @@ window.MapExample = (function() {
   }
 
   function destroy() {
+    if (panAnimFrame) { cancelAnimationFrame(panAnimFrame); panAnimFrame = null; }
     if (map) { map.remove(); map = null; }
     drawingLayer = null;
     currentPath = null;
