@@ -1,4 +1,17 @@
 window.MapExample = (function() {
+  // Tile layer subclass that loads +1 extra tile on every side of the
+  // visible viewport for smoother panning without blank edges.
+  var BufferedTileLayer = L.TileLayer.extend({
+    _getTiledPixelBounds: function(center) {
+      var bounds = L.TileLayer.prototype._getTiledPixelBounds.call(this, center);
+      var ts = this.getTileSize();
+      return new L.Bounds(
+        bounds.min.subtract([ts.x, ts.y]),
+        bounds.max.add([ts.x, ts.y])
+      );
+    }
+  });
+
   var map = null;
   var drawingLayer = null;
   var phoneMarker = null;
@@ -16,12 +29,17 @@ window.MapExample = (function() {
     panel = panelEl;
     panel.innerHTML = '<div id="map-container" style="width:100%;height:100%;min-height:400px;"></div>';
     map = L.map('map-container', { zoomControl: true }).setView([51.505, -0.09], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    new BufferedTileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
       opacity: 0.85
     }).addTo(map);
     drawingLayer = L.layerGroup().addTo(map);
+
+    // Custom pane for drawn paths — z-index 650 keeps them above tiles (200)
+    // and the default overlayPane (400) at all times.
+    map.createPane('drawPane');
+    map.getPane('drawPane').style.zIndex = 650;
 
     // Custom pulsing icon for the phone marker
     var phoneIcon = L.divIcon({
@@ -105,7 +123,7 @@ window.MapExample = (function() {
 
     if (data.type === 'start') {
       isDrawing = true;
-      currentPath = L.polyline([latlng], { color: '#e94560', weight: 3, opacity: 0.9 }).addTo(drawingLayer);
+      currentPath = L.polyline([latlng], { color: '#e94560', weight: 3, opacity: 0.9, pane: 'drawPane' }).addTo(drawingLayer);
       console.log('[MapExample] Drawing start at lat=' + latlng.lat.toFixed(5) + ' lng=' + latlng.lng.toFixed(5));
     } else if (data.type === 'move' && isDrawing && currentPath) {
       currentPath.addLatLng(latlng);

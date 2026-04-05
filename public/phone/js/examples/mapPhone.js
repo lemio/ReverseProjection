@@ -1,4 +1,17 @@
 window.MapPhone = (function() {
+  // Tile layer subclass that loads +1 extra tile on every side of the
+  // visible viewport for smoother panning without blank edges.
+  var BufferedTileLayer = L.TileLayer.extend({
+    _getTiledPixelBounds: function(center) {
+      var bounds = L.TileLayer.prototype._getTiledPixelBounds.call(this, center);
+      var ts = this.getTileSize();
+      return new L.Bounds(
+        bounds.min.subtract([ts.x, ts.y]),
+        bounds.max.add([ts.x, ts.y])
+      );
+    }
+  });
+
   var map = null;
   var drawLayer = null;
   var currentPath = null;
@@ -27,11 +40,16 @@ window.MapPhone = (function() {
         keyboard: false
       }).setView([51.505, -0.09], 16);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      new BufferedTileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19
       }).addTo(map);
 
       drawLayer = L.layerGroup().addTo(map);
+
+      // Custom pane for drawn paths — z-index 650 keeps them above tiles (200)
+      // and the default overlayPane (400) at all times, including after rotation.
+      map.createPane('drawPane');
+      map.getPane('drawPane').style.zIndex = 650;
 
       // Force Leaflet to re-measure the container after layout settles
       map.invalidateSize();
@@ -117,7 +135,7 @@ window.MapPhone = (function() {
     isDrawing = true;
     var ll = eventToLatLng(e);
     if (ll) {
-      currentPath = L.polyline([ll], { color: '#e94560', weight: 4, opacity: 0.9 }).addTo(drawLayer);
+      currentPath = L.polyline([ll], { color: '#e94560', weight: 4, opacity: 0.9, pane: 'drawPane' }).addTo(drawLayer);
       sendTouch({ type: 'start', lat: ll.lat, lng: ll.lng });
     }
   }
@@ -143,7 +161,7 @@ window.MapPhone = (function() {
     mouseDown = true;
     var ll = eventToLatLng(e);
     if (ll) {
-      currentPath = L.polyline([ll], { color: '#e94560', weight: 4, opacity: 0.9 }).addTo(drawLayer);
+      currentPath = L.polyline([ll], { color: '#e94560', weight: 4, opacity: 0.9, pane: 'drawPane' }).addTo(drawLayer);
       sendTouch({ type: 'start', lat: ll.lat, lng: ll.lng });
     }
   }
