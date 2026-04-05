@@ -1,0 +1,171 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0f0f0f;
+  color: #e2e2e2;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ── Root container ── */
+#phone-app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Single centred marker — always visible at the top ── */
+#marker-single {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(75vw, 280px);
+  height: min(75vw, 280px);
+  z-index: 100;
+  pointer-events: none;
+  image-rendering: pixelated;
+  transition: width 0.4s ease, height 0.4s ease;
+}
+
+/* Grow marker when laptop can't find the phone — aids re-detection */
+#phone-app.searching #marker-single {
+  width: min(90vw, 360px);
+  height: min(90vw, 360px);
+}
+
+/* ── Connecting screen ── */
+#connecting-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f0f0f;
+  padding: 1rem;
+}
+
+.connect-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.connect-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #2a2a2a;
+  border-top-color: #4d7cfe;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.connect-card p {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+#connect-status {
+  font-size: 0.8rem;
+  color: #f87171;
+  min-height: 1.2em;
+  text-align: center;
+}
+
+/* ── Example area ── */
+#example-area {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Content sits below the single marker.
+   Margin is fixed — the marker grows visually (overlapping the map) when
+   searching, but the map container height never changes so Leaflet's
+   internal pixel↔coordinate mapping stays valid at all times. */
+#example-content {
+  flex: 1;
+  min-height: 0;
+  margin-top: calc(min(75vw, 280px) + 8px);
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Status bar ── */
+#status-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.75rem;
+  background: rgba(26, 26, 26, 0.85);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.75rem;
+  z-index: 20;
+}
+
+#example-name {
+  font-weight: 600;
+  color: #e2e2e2;
+}
+
+#connection-indicator {
+  font-size: 0.72rem;
+  color: #666;
+}
+#connection-indicator::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #444;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+#connection-indicator.connected {
+  color: #34d399;
+}
+#connection-indicator.connected::before {
+  background: #34d399;
+}
+
+#phone-draw-canvas {
+  touch-action: none;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+/* Leaflet map inside the phone */
+.leaflet-container {
+  background: transparent !important;
+}
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  background: rgba(0,0,0,0.45) !important;
+  color: #777 !important;
+}

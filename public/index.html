@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ReverseProjection</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div id="brand">ReverseProjection</div>
+      <div id="toolbar">
+        <div id="tool-group">
+          <button class="tool-btn active" data-example="map">Map</button>
+          <div class="toolbar-sep"></div>
+          <button class="tool-btn" id="invert-btn">Invert</button>
+          <button class="tool-btn" id="rotate-btn">No Rotation</button>
+        </div>
+        <div id="connection-group">
+          <button id="copy-link">Copy Phone Link</button>
+          <button id="qr-btn">Show QR Code</button>
+        </div>
+        <div id="status">
+          <span class="status-item" id="phone-status">
+            <span class="status-dot"></span>Phone
+          </span>
+          <span class="status-item" id="detection-status">
+            <span class="status-dot"></span>Initialising
+          </span>
+        </div>
+      </div>
+    </header>
+    <main>
+      <div id="webcam-container">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="detection-canvas"></canvas>
+        <canvas id="overlay-canvas"></canvas>
+      </div>
+      <div id="example-panel">
+      </div>
+    </main>
+  </div>
+
+  <!-- QR code modal -->
+  <div id="qr-modal" class="modal hidden">
+    <div class="modal-backdrop" id="qr-backdrop"></div>
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">Scan to connect phone</span>
+        <button class="modal-close" id="qr-close">Close</button>
+      </div>
+      <div id="qr-code">
+        <img id="qr-image" src="" alt="QR Code" width="220" height="220">
+      </div>
+      <p id="qr-url"></p>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- jsartoolkit5: complete bundle (asm.js engine + ARController API) -->
+  <script src="/js/vendor/artoolkit.min.js"></script>
+  <!-- ReverseProjection detection & examples -->
+  <script src="/js/jsarDetector.js"></script>
+  <script src="/js/homography.js"></script>
+  <script src="/js/examples/mapExample.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

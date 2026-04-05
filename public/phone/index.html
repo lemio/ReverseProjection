@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>ReverseProjection</title>
+  <link rel="manifest" href="/phone/manifest.json">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/phone/css/phone.css">
+</head>
+<body>
+  <div id="phone-app">
+    <!-- Single centred 3x3 barcode marker (ID 0) detected by jsartoolkit5 -->
+    <canvas id="marker-single" data-marker-id="0"></canvas>
+
+    <!-- Connecting overlay — shown briefly while the socket handshakes -->
+    <div id="connecting-screen">
+      <div class="connect-card">
+        <div class="connect-spinner"></div>
+        <p>Connecting...</p>
+        <p id="connect-status"></p>
+      </div>
+    </div>
+
+    <div id="example-area" style="display:none;">
+      <div id="example-content"></div>
+      <div id="status-bar">
+        <span id="example-name">Map</span>
+        <span id="connection-indicator" class="connected">Live</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/phone/js/drawMarker.js"></script>
+  <script src="/phone/js/examples/mapPhone.js"></script>
+  <script src="/phone/js/phoneApp.js"></script>
+  <script>
+    // Draw the single 3x3 barcode marker onto the canvas
+    (function() {
+      var s = document.getElementById('marker-single');
+      drawJSARMarker(s, parseInt(s.dataset.markerId, 10), s.offsetWidth || 280);
+    })();
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/phone/sw.js').catch(console.error);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "reverse-projection",
+  "version": "1.0.0",
+  "description": "Webcam-based reverse projection application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "js-aruco2": "^2.0.0",
+    "jsartoolkit5": "^0.0.4",
+    "socket.io": "^4.7.2"
+  }
+}
