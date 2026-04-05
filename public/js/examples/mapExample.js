@@ -85,7 +85,7 @@ window.MapExample = (function() {
     if (data.lat !== undefined && data.lng !== undefined) {
       // Phone sends lat/lng directly
       latlng = L.latLng(data.lat, data.lng);
-    } else if (data.x !== undefined && data.y !== undefined) {
+    } else if (data.x != null && data.y != null) {
       // Legacy: x,y within the phone's mini-map area
       var containerSize = map.getContainer().getBoundingClientRect();
       latlng = map.containerPointToLatLng([data.x * containerSize.width, data.y * containerSize.height]);
