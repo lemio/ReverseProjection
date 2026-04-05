@@ -8,6 +8,8 @@ window.MapExample = (function() {
   var detected = false;
   // Normalised camera-frame position of the phone centre (0–1)
   var phoneNX = 0.5, phoneNY = 0.5;
+  var phoneRotation = 0;     // radians, from the detection layer
+  var rotationEnabled = false;
   var positionLogCount = 0;
 
   function init(panelEl) {
@@ -33,6 +35,12 @@ window.MapExample = (function() {
     console.log('[MapExample] Leaflet map initialized at', map.getCenter(), 'zoom', map.getZoom());
   }
 
+  // Enable/disable rotation forwarding to the phone's mini-map
+  function setRotationEnabled(enabled) {
+    rotationEnabled = !!enabled;
+    console.log('[MapExample] rotationEnabled=' + rotationEnabled);
+  }
+
   // Convert normalised camera position to lat/lng using the map's current bounds
   function cameraToLatLng(nx, ny) {
     var bounds = map.getBounds();
@@ -41,9 +49,10 @@ window.MapExample = (function() {
     return L.latLng(north - ny * (north - south), west + nx * (east - west));
   }
 
-  function onPhonePosition(nx, ny) {
+  function onPhonePosition(nx, ny, rotation) {
     phoneNX = nx;
     phoneNY = ny;
+    phoneRotation = rotation || 0;
     detected = true;
     if (!map) return;
     var latlng = cameraToLatLng(nx, ny);
@@ -54,6 +63,7 @@ window.MapExample = (function() {
       var bounds = map.getBounds();
       console.log('[MapExample] onPhonePosition #' + positionLogCount +
         ' | nx=' + nx.toFixed(3) + ' ny=' + ny.toFixed(3) +
+        ' rot=' + (rotation || 0).toFixed(2) +
         ' → lat=' + latlng.lat.toFixed(5) + ' lng=' + latlng.lng.toFixed(5) +
         ' | mapBounds N=' + bounds.getNorth().toFixed(4) +
         ' S=' + bounds.getSouth().toFixed(4) +
@@ -122,7 +132,9 @@ window.MapExample = (function() {
         south: bounds.getSouth(),
         west:  bounds.getWest(),
         east:  bounds.getEast()
-      }
+      },
+      // Only forward rotation when the feature is enabled on the laptop
+      mapRotation: rotationEnabled ? phoneRotation : 0
     };
   }
 
@@ -137,5 +149,5 @@ window.MapExample = (function() {
     console.log('[MapExample] destroyed');
   }
 
-  return { init, onPhonePosition, onDetectionChange, onPhoneTouch, getState, destroy };
+  return { init, onPhonePosition, onDetectionChange, onPhoneTouch, getState, destroy, setRotationEnabled };
 })();

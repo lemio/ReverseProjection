@@ -65,6 +65,7 @@ window.MapPhone = (function() {
         ' | phoneLat=' + (state && state.phoneLat != null ? state.phoneLat.toFixed(5) : 'null') +
         ' | phoneLng=' + (state && state.phoneLng != null ? state.phoneLng.toFixed(5) : 'null') +
         ' | mapZoom=' + (state && state.mapZoom) +
+        ' | mapRotation=' + (state && state.mapRotation != null ? state.mapRotation.toFixed(2) : '0') +
         ' | map ready=' + (map !== null));
     }
 
@@ -88,6 +89,16 @@ window.MapPhone = (function() {
       }
     } else if (!state.detected && stateLogCount % 30 === 1) {
       console.log('[MapPhone] Phone not detected — map stays at current view');
+    }
+
+    // Apply rotation: rotate the map container to match the phone's physical orientation
+    var rotation = (state.mapRotation != null) ? state.mapRotation : 0;
+    var container = map.getContainer();
+    if (rotation !== 0) {
+      container.style.transformOrigin = 'center center';
+      container.style.transform = 'rotate(' + rotation.toFixed(4) + 'rad)';
+    } else {
+      container.style.transform = '';
     }
   }
 

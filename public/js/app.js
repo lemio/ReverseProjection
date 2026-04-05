@@ -50,7 +50,11 @@
     currentExampleName = name;
     activeExample = examples[name] || null;
     if (activeExample && activeExample.init) activeExample.init(panelEl);
-    socket.emit('config:change', { example: name, detectionMode: ArucoDetector.getMode() });
+    // Propagate rotation state to freshly-initialised example
+    if (activeExample && activeExample.setRotationEnabled) {
+      activeExample.setRotationEnabled(useRotation);
+    }
+    socket.emit('config:change', { example: name, detectionMode: JSARDetector.getMode() });
   }
 
   document.querySelectorAll('.example-btn').forEach(function(btn) {
@@ -60,20 +64,45 @@
   // ── Detection mode toggle ──────────────────────────────────────────────────
   const modeBtn = document.getElementById('detection-mode-btn');
   modeBtn.addEventListener('click', function() {
-    const newMode = ArucoDetector.getMode() === 'four-corner' ? 'single' : 'four-corner';
-    ArucoDetector.setMode(newMode);
+    const newMode = JSARDetector.getMode() === 'four-corner' ? 'single' : 'four-corner';
+    JSARDetector.setMode(newMode);
     modeBtn.textContent = newMode === 'single' ? '🎯 Single marker' : '🎯 4-corner';
     modeBtn.classList.toggle('active', newMode === 'single');
     console.log('[App] Detection mode switched to', newMode);
     socket.emit('config:change', { example: currentExampleName, detectionMode: newMode });
   });
 
+  // ── Invert controls toggle ─────────────────────────────────────────────────
+  // When inverted, moving the phone up moves the map up (natural direction).
+  // Without inversion the camera y-axis is preserved (top-of-frame = north).
+  let invertControls = false;
+  const invertBtn = document.getElementById('invert-btn');
+  invertBtn.addEventListener('click', function() {
+    invertControls = !invertControls;
+    invertBtn.textContent = invertControls ? '↕️ Inverted ✓' : '↕️ Invert';
+    invertBtn.classList.toggle('active', invertControls);
+    console.log('[App] invertControls =', invertControls);
+  });
+
+  // ── Rotation toggle ────────────────────────────────────────────────────────
+  // When enabled, phone rotation (yaw in camera plane) is forwarded to the
+  // phone's mini-map so the map rotates with the phone.
+  let useRotation = false;
+  const rotateBtn = document.getElementById('rotate-btn');
+  rotateBtn.addEventListener('click', function() {
+    useRotation = !useRotation;
+    rotateBtn.textContent = useRotation ? '🔄 Rotating ✓' : '🔄 No rotation';
+    rotateBtn.classList.toggle('active', useRotation);
+    if (activeExample && activeExample.setRotationEnabled) {
+      activeExample.setRotationEnabled(useRotation);
+    }
+    console.log('[App] useRotation =', useRotation);
+  });
+
   // ── Webcam ─────────────────────────────────────────────────────────────────
-  const webcamVideo       = document.getElementById('webcam');
-  const detectionCanvas   = document.getElementById('detection-canvas');
-  const overlayCanvas     = document.getElementById('overlay-canvas');
-  const detCtx            = detectionCanvas.getContext('2d');
-  const overlayCtx        = overlayCanvas.getContext('2d');
+  const webcamVideo     = document.getElementById('webcam');
+  const overlayCanvas   = document.getElementById('overlay-canvas');
+  const overlayCtx      = overlayCanvas.getContext('2d');
 
   navigator.mediaDevices.getUserMedia({
     video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' }
@@ -82,18 +111,18 @@
     webcamVideo.onloadedmetadata = function() {
       overlayCanvas.width  = webcamVideo.videoWidth;
       overlayCanvas.height = webcamVideo.videoHeight;
-      document.getElementById('detection-status').textContent = '👁️ Detection: running';
+      document.getElementById('detection-status').textContent = '👁️ Detection: searching…';
+      // Kick-start jsartoolkit5 async initialisation
+      JSARDetector.init();
       detectLoop();
     };
   }).catch(function(err) {
     document.getElementById('detection-status').textContent = '👁️ Webcam: error – ' + err.message;
   });
 
-  // Base detection dimensions for four-corner mode.
-  // Single-marker mode uses a larger canvas so the one small marker occupies
-  // enough pixels to be reliably found by js-aruco2's candidate detector.
-  const DETECT_W = 480, DETECT_H = 360;
-  const DETECT_W_SINGLE = 640, DETECT_H_SINGLE = 480;
+  // jsartoolkit5 uses an internal 640×480 canvas; all returned coordinates are
+  // in that space and must be scaled up to the native video resolution here.
+  const DETECT_W = 640, DETECT_H = 480;
   let frameCount = 0;
   let phoneDetected = false;
   let stateEmitCount = 0;
@@ -104,21 +133,15 @@
     if (frameCount % 3 !== 0) return;
     if (!webcamVideo.videoWidth) return;
 
-    const singleMode = ArucoDetector.getMode() === 'single';
-    const detectW = singleMode ? DETECT_W_SINGLE : DETECT_W;
-    const detectH = singleMode ? DETECT_H_SINGLE : DETECT_H;
-
-    detectionCanvas.width  = detectW;
-    detectionCanvas.height = detectH;
-    detCtx.drawImage(webcamVideo, 0, 0, detectW, detectH);
-    const imageData = detCtx.getImageData(0, 0, detectW, detectH);
-    let corners = ArucoDetector.detect(imageData);
+    // JSARDetector handles its own internal canvas; just pass the video element
+    let corners = JSARDetector.detect(webcamVideo);
 
     let phoneNX = null, phoneNY = null;
 
     if (corners) {
-      const scaleX = webcamVideo.videoWidth  / detectW;
-      const scaleY = webcamVideo.videoHeight / detectH;
+      // Scale from jsartoolkit5 detection resolution to native video resolution
+      const scaleX = webcamVideo.videoWidth  / DETECT_W;
+      const scaleY = webcamVideo.videoHeight / DETECT_H;
       Object.keys(corners).forEach(function(key) {
         corners[key] = { x: corners[key].x * scaleX, y: corners[key].y * scaleY };
       });
@@ -145,8 +168,11 @@
       const dx = corners.topRight.x - corners.topLeft.x;
       const dy = corners.topRight.y - corners.topLeft.y;
       const rotation = Math.atan2(dy, dx);
-      phoneNX = center.x / W;
-      phoneNY = center.y / H;
+
+      // Apply invert: flip X and Y so "phone up → map up" (natural direction)
+      phoneNX = invertControls ? 1 - center.x / W : center.x / W;
+      phoneNY = invertControls ? 1 - center.y / H : center.y / H;
+
       activeExample.onPhonePosition(phoneNX, phoneNY, rotation);
 
       stateEmitCount++;
@@ -158,6 +184,7 @@
           console.log('[App] State emitted #' + stateEmitCount +
             ' | nx=' + phoneNX.toFixed(3) + ' ny=' + phoneNY.toFixed(3) +
             ' | rot=' + rotation.toFixed(2) + 'rad' +
+            ' | inverted=' + invertControls +
             ' | phoneLat=' + (state && state.phoneLat != null ? state.phoneLat.toFixed(5) : 'null') +
             ' | phoneLng=' + (state && state.phoneLng != null ? state.phoneLng.toFixed(5) : 'null') +
             ' | detected=' + (state && state.detected));
@@ -168,12 +195,13 @@
       socket.emit('laptop:state', activeExample.getState());
     }
 
-    drawOverlay(corners, phoneNX, phoneNY, activeExample && activeExample.getState ? activeExample.getState() : null, ArucoDetector.getMode());
+    drawOverlay(corners, phoneNX, phoneNY,
+      activeExample && activeExample.getState ? activeExample.getState() : null,
+      JSARDetector.getMode());
   }
 
   function drawOverlay(corners, phoneNX, phoneNY, state, detMode) {
-    // Only resize when video dimensions actually change (avoids clearing every frame).
-    // Guard: skip if video hasn't started yet.
+    // Only resize when video dimensions actually change
     if (!webcamVideo.videoWidth) return;
     const vw = webcamVideo.videoWidth;
     const vh = webcamVideo.videoHeight;
@@ -192,21 +220,20 @@
       overlayCtx.fillStyle = '#fff';
       overlayCtx.font = 'bold 13px monospace';
       const modeLabel = detMode === 'single'
-        ? ('SEARCHING ID ' + ArucoDetector.getSingleMarkerId() + '…')
+        ? ('SEARCHING ID ' + JSARDetector.getSingleMarkerId() + '…')
         : 'SEARCHING 4-CORNER…';
       overlayCtx.fillText(modeLabel, 42, 29);
       return;
     }
 
     const pts = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft];
-    // In single-marker mode the corners are the marker's own quad; show the single ID.
-    // In four-corner mode show each corner's ArUco ID.
+    // Show barcode IDs matching the 3×3 corner markers on the phone
     const markerIds = detMode === 'single'
-      ? [ArucoDetector.getSingleMarkerId(), ArucoDetector.getSingleMarkerId(),
-         ArucoDetector.getSingleMarkerId(), ArucoDetector.getSingleMarkerId()]
-      : [0, 42, 127, 85];
+      ? [JSARDetector.getSingleMarkerId(), JSARDetector.getSingleMarkerId(),
+         JSARDetector.getSingleMarkerId(), JSARDetector.getSingleMarkerId()]
+      : [0, 8, 56, 40];
 
-    // Semi-transparent fill so the phone outline is visible
+    // Semi-transparent fill
     overlayCtx.fillStyle = 'rgba(0,255,128,0.08)';
     overlayCtx.beginPath();
     overlayCtx.moveTo(pts[0].x, pts[0].y);
@@ -214,7 +241,7 @@
     overlayCtx.closePath();
     overlayCtx.fill();
 
-    // Draw quadrilateral outline
+    // Quadrilateral outline
     overlayCtx.strokeStyle = '#00ff88';
     overlayCtx.lineWidth = 3;
     overlayCtx.beginPath();
@@ -223,7 +250,7 @@
     overlayCtx.closePath();
     overlayCtx.stroke();
 
-    // Corner dots + labels showing marker ID + position name
+    // Corner dots + labels
     const dotColors = ['#ff4444', '#44ff44', '#ffff44', '#4444ff'];
     const labels    = ['TL', 'TR', 'BR', 'BL'];
     pts.forEach(function(pt, i) {
@@ -231,11 +258,9 @@
       overlayCtx.beginPath();
       overlayCtx.arc(pt.x, pt.y, 9, 0, Math.PI * 2);
       overlayCtx.fill();
-      // White border
       overlayCtx.strokeStyle = '#fff';
       overlayCtx.lineWidth = 1.5;
       overlayCtx.stroke();
-      // Label: corner name + marker ID
       overlayCtx.fillStyle = '#fff';
       overlayCtx.font = 'bold 11px monospace';
       const label = labels[i] + ' #' + markerIds[i];
@@ -263,6 +288,7 @@
         lines.push('lat=' + state.phoneLat.toFixed(5));
         lines.push('lng=' + state.phoneLng.toFixed(5));
       }
+      if (invertControls) lines.push('[INVERTED]');
       const boxX = Math.min(cx + 18, vw - 160);
       const boxY = cy - 8;
       const lineH = 16;
@@ -275,7 +301,7 @@
       });
     }
 
-    // Rotation indicator — small arrow from centre
+    // Rotation indicator — small yellow arrow from centre
     const dx = corners.topRight.x - corners.topLeft.x;
     const dy = corners.topRight.y - corners.topLeft.y;
     const angle = Math.atan2(dy, dx);
