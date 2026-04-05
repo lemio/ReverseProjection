@@ -38,6 +38,7 @@
 
   // ── Example switching ──────────────────────────────────────────────────────
   let activeExample = null;
+  let currentExampleName = 'map';
   const examples = { map: window.MapExample, pong: window.PongExample };
   const panelEl = document.getElementById('example-panel');
 
@@ -46,13 +47,25 @@
     document.querySelectorAll('.example-btn').forEach(function(b) {
       b.classList.toggle('active', b.dataset.example === name);
     });
+    currentExampleName = name;
     activeExample = examples[name] || null;
     if (activeExample && activeExample.init) activeExample.init(panelEl);
-    socket.emit('config:change', { example: name });
+    socket.emit('config:change', { example: name, detectionMode: ArucoDetector.getMode() });
   }
 
   document.querySelectorAll('.example-btn').forEach(function(btn) {
     btn.addEventListener('click', function() { switchExample(btn.dataset.example); });
+  });
+
+  // ── Detection mode toggle ──────────────────────────────────────────────────
+  const modeBtn = document.getElementById('detection-mode-btn');
+  modeBtn.addEventListener('click', function() {
+    const newMode = ArucoDetector.getMode() === 'four-corner' ? 'single' : 'four-corner';
+    ArucoDetector.setMode(newMode);
+    modeBtn.textContent = newMode === 'single' ? '🎯 Single marker' : '🎯 4-corner';
+    modeBtn.classList.toggle('active', newMode === 'single');
+    console.log('[App] Detection mode switched to', newMode);
+    socket.emit('config:change', { example: currentExampleName, detectionMode: newMode });
   });
 
   // ── Webcam ─────────────────────────────────────────────────────────────────
@@ -147,10 +160,10 @@
       socket.emit('laptop:state', activeExample.getState());
     }
 
-    drawOverlay(corners, phoneNX, phoneNY, activeExample && activeExample.getState ? activeExample.getState() : null);
+    drawOverlay(corners, phoneNX, phoneNY, activeExample && activeExample.getState ? activeExample.getState() : null, ArucoDetector.getMode());
   }
 
-  function drawOverlay(corners, phoneNX, phoneNY, state) {
+  function drawOverlay(corners, phoneNX, phoneNY, state, detMode) {
     // Only resize when video dimensions actually change (avoids clearing every frame).
     // Guard: skip if video hasn't started yet.
     if (!webcamVideo.videoWidth) return;
@@ -170,13 +183,20 @@
       overlayCtx.fill();
       overlayCtx.fillStyle = '#fff';
       overlayCtx.font = 'bold 13px monospace';
-      overlayCtx.fillText('SEARCHING…', 42, 29);
+      const modeLabel = detMode === 'single'
+        ? ('SEARCHING ID ' + ArucoDetector.getSingleMarkerId() + '…')
+        : 'SEARCHING 4-CORNER…';
+      overlayCtx.fillText(modeLabel, 42, 29);
       return;
     }
 
     const pts = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft];
-    // ArUco IDs for each corner (TL, TR, BR, BL)
-    const markerIds = [0, 42, 127, 85];
+    // In single-marker mode the corners are the marker's own quad; show the single ID.
+    // In four-corner mode show each corner's ArUco ID.
+    const markerIds = detMode === 'single'
+      ? [ArucoDetector.getSingleMarkerId(), ArucoDetector.getSingleMarkerId(),
+         ArucoDetector.getSingleMarkerId(), ArucoDetector.getSingleMarkerId()]
+      : [0, 42, 127, 85];
 
     // Semi-transparent fill so the phone outline is visible
     overlayCtx.fillStyle = 'rgba(0,255,128,0.08)';

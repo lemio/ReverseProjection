@@ -72,14 +72,25 @@ window.MapExample = (function() {
 
   function onPhoneTouch(data) {
     if (!map) return;
+
+    // Handle end-of-drawing first — it carries no lat/lng
+    if (data.type === 'end') {
+      isDrawing = false;
+      currentPath = null;
+      console.log('[MapExample] Drawing end');
+      return;
+    }
+
     var latlng;
     if (data.lat !== undefined && data.lng !== undefined) {
       // Phone sends lat/lng directly
       latlng = L.latLng(data.lat, data.lng);
-    } else {
+    } else if (data.x !== undefined && data.y !== undefined) {
       // Legacy: x,y within the phone's mini-map area
       var containerSize = map.getContainer().getBoundingClientRect();
       latlng = map.containerPointToLatLng([data.x * containerSize.width, data.y * containerSize.height]);
+    } else {
+      return; // no usable position data
     }
 
     if (data.type === 'start') {
@@ -88,10 +99,6 @@ window.MapExample = (function() {
       console.log('[MapExample] Drawing start at lat=' + latlng.lat.toFixed(5) + ' lng=' + latlng.lng.toFixed(5));
     } else if (data.type === 'move' && isDrawing && currentPath) {
       currentPath.addLatLng(latlng);
-    } else if (data.type === 'end') {
-      isDrawing = false;
-      currentPath = null;
-      console.log('[MapExample] Drawing end');
     }
   }
 

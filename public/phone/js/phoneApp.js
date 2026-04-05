@@ -30,7 +30,26 @@
     });
 
     socket.on('config:change', function(data) {
-      switchExample(data.example);
+      if (data.example) switchExample(data.example);
+      if (data.detectionMode !== undefined) {
+        var phoneApp = document.getElementById('phone-app');
+        if (data.detectionMode === 'single') {
+          phoneApp.classList.add('single-marker-mode');
+          phoneApp.classList.remove('four-corner-mode');
+          // Redraw single marker at its new rendered size
+          var s = document.getElementById('marker-single');
+          if (s) drawArucoMarker(s, parseInt(s.dataset.markerId, 10), s.offsetWidth || 200);
+          console.log('[PhoneApp] Switched to single-marker mode');
+        } else {
+          phoneApp.classList.remove('single-marker-mode');
+          phoneApp.classList.add('four-corner-mode');
+          // Redraw corner markers at their rendered size
+          document.querySelectorAll('.corner-marker[data-marker-id]').forEach(function(canvas) {
+            drawArucoMarker(canvas, parseInt(canvas.dataset.markerId, 10), canvas.offsetWidth || 110);
+          });
+          console.log('[PhoneApp] Switched to four-corner mode');
+        }
+      }
     });
 
     socket.on('laptop:state', function(state) {
@@ -60,10 +79,16 @@
         console.log('[PhoneApp] searching class ' + (nowSearching ? 'ADDED' : 'REMOVED'));
         // Redraw markers after CSS transition completes (size changed)
         setTimeout(function() {
-          document.querySelectorAll('.corner-marker[data-marker-id]').forEach(function(canvas) {
-            var id = parseInt(canvas.dataset.markerId, 10);
-            drawArucoMarker(canvas, id, canvas.offsetWidth);
-          });
+          var phoneApp = document.getElementById('phone-app');
+          if (phoneApp.classList.contains('single-marker-mode')) {
+            var s = document.getElementById('marker-single');
+            if (s) drawArucoMarker(s, parseInt(s.dataset.markerId, 10), s.offsetWidth || 200);
+          } else {
+            document.querySelectorAll('.corner-marker[data-marker-id]').forEach(function(canvas) {
+              var id = parseInt(canvas.dataset.markerId, 10);
+              drawArucoMarker(canvas, id, canvas.offsetWidth);
+            });
+          }
         }, 450); // slightly longer than the 0.4s CSS transition
       }
     });

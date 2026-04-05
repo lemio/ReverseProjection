@@ -171,7 +171,42 @@ html, body {
   color: #00ff00;
 }
 
-/* ── Map hint / pong hint labels ── */
+/* ── Single-marker mode ── */
+
+/* The single marker: large, centered at the top, hidden by default */
+#marker-single {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  z-index: 100;
+  outline: 4px solid #fff;
+  image-rendering: pixelated;
+}
+
+/* Activate single-marker layout */
+#phone-app.single-marker-mode #marker-single {
+  display: block;
+}
+#phone-app.single-marker-mode .corner-marker {
+  display: none;
+}
+/* Shift content down past the single marker; full width */
+#phone-app.single-marker-mode #example-content {
+  margin-top: 208px;   /* marker height + 4px outline + 4px gap */
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 0;
+}
+#phone-app.single-marker-mode #status-bar {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 0;
+}
 .map-hint, .pong-hint {
   position: absolute;
   bottom: 0.5rem;

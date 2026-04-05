@@ -13,11 +13,14 @@
 </head>
 <body>
   <div id="phone-app">
-    <!-- Corner ArUco markers (canvas sized by CSS; drawMarker.js fills them) -->
+    <!-- Four-corner ArUco markers (canvas sized by CSS; drawMarker.js fills them) -->
     <canvas class="corner-marker" id="marker-tl" data-marker-id="0"></canvas>
     <canvas class="corner-marker" id="marker-tr" data-marker-id="42"></canvas>
     <canvas class="corner-marker" id="marker-bl" data-marker-id="85"></canvas>
     <canvas class="corner-marker" id="marker-br" data-marker-id="127"></canvas>
+
+    <!-- Single-marker mode: one large marker at top-centre -->
+    <canvas id="marker-single" data-marker-id="0"></canvas>
 
     <div id="connection-screen">
       <div class="connect-card">
@@ -51,6 +54,12 @@
       var id = parseInt(canvas.dataset.markerId, 10);
       drawArucoMarker(canvas, id, canvas.offsetWidth || 110);
     });
+    // Single-marker canvas (hidden until single mode is activated)
+    (function() {
+      var s = document.getElementById('marker-single');
+      var id = parseInt(s.dataset.markerId, 10);
+      drawArucoMarker(s, id, s.offsetWidth || 200);
+    })();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/phone/sw.js').catch(console.error);
     }
