@@ -10,7 +10,10 @@ window.Homography = (function() {
       A.push([  0,   0,  0, -sx, -sy, -1, dy * sx, dy * sy, dy]);
     }
     const h = gaussianElimination(A);
-    if (!h) return null;
+    if (!h) {
+      console.warn('Homography: singular matrix, could not compute transform.');
+      return null;
+    }
     return [
       [h[0], h[1], h[2]],
       [h[3], h[4], h[5]],

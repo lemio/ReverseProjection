@@ -1,6 +1,9 @@
 (function() {
   function generateRoomId() {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let id = '';
+    for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+    return id;
   }
 
   let roomId = localStorage.getItem('rpRoomId') || generateRoomId();
@@ -119,14 +122,16 @@
   }
 
   function drawOverlay(corners) {
-    // Only resize when video dimensions actually change (avoids clearing every frame)
-    const vw = webcamVideo.videoWidth  || overlayCanvas.width;
-    const vh = webcamVideo.videoHeight || overlayCanvas.height;
+    // Only resize when video dimensions actually change (avoids clearing every frame).
+    // Guard: skip if video hasn't started yet.
+    if (!webcamVideo.videoWidth) return;
+    const vw = webcamVideo.videoWidth;
+    const vh = webcamVideo.videoHeight;
     if (overlayCanvas.width !== vw || overlayCanvas.height !== vh) {
       overlayCanvas.width  = vw;
       overlayCanvas.height = vh;
     }
-    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    overlayCtx.clearRect(0, 0, vw, vh);
 
     if (!corners) {
       overlayCtx.fillStyle = 'rgba(255,0,0,0.6)';

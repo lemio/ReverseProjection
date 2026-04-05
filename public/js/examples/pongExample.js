@@ -42,25 +42,26 @@ window.PongExample = (function() {
     aiBatY += (ball.y - aiBatY) * 0.05;
     aiBatY = Math.max(BAT_HEIGHT / 2, Math.min(1 - BAT_HEIGHT / 2, aiBatY));
 
+    const MAX_V = 0.025;
+
     // Player bat collision (left)
     if (ball.x < BAT_WIDTH + BALL_SIZE && ball.vx < 0) {
       if (Math.abs(ball.y - batY) < BAT_HEIGHT / 2 + BALL_SIZE / 2) {
-        ball.vx =  Math.abs(ball.vx) * 1.05;
-        ball.vy += (ball.y - batY) * 0.04;
+        ball.vx = Math.min(MAX_V,  Math.abs(ball.vx) * 1.05);
+        ball.vy = Math.max(-MAX_V, Math.min(MAX_V, ball.vy + (ball.y - batY) * 0.04));
       }
     }
     // AI bat collision (right)
     if (ball.x > 1 - BAT_WIDTH - BALL_SIZE && ball.vx > 0) {
       if (Math.abs(ball.y - aiBatY) < BAT_HEIGHT / 2 + BALL_SIZE / 2) {
-        ball.vx = -Math.abs(ball.vx) * 1.05;
-        ball.vy += (ball.y - aiBatY) * 0.04;
+        ball.vx = -Math.min(MAX_V, Math.abs(ball.vx) * 1.05);
+        ball.vy = Math.max(-MAX_V, Math.min(MAX_V, ball.vy + (ball.y - aiBatY) * 0.04));
       }
     }
 
     if (ball.x < 0) { score.ai++;     resetBall(); }
     if (ball.x > 1) { score.player++; resetBall(); }
 
-    const MAX_V = 0.025;
     ball.vx = Math.max(-MAX_V, Math.min(MAX_V, ball.vx));
     ball.vy = Math.max(-MAX_V, Math.min(MAX_V, ball.vy));
   }

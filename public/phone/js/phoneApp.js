@@ -1,10 +1,10 @@
 (function() {
-  function getRoomFromUrl() {
+  function getRoomCodeFromUrl() {
     var params = new URLSearchParams(window.location.search);
     return params.get('room');
   }
 
-  var urlRoom = getRoomFromUrl();
+  var urlRoom = getRoomCodeFromUrl();
   var socket = null;
   var currentExample = 'map';
   var examples = { map: window.MapPhone, pong: window.PongPhone };

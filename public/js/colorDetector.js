@@ -11,6 +11,26 @@ window.ColorDetector = (function() {
   const YELLOW_RG_RATIO = 0.75; // (R+G)/sum ratio threshold for yellow
   const MIN_PIXEL_COUNT = 20;   // minimum matching pixels to accept a centroid
 
+  // Generic single-channel dominant colour test
+  function makePrimaryTest(ch) {
+    return function(r, g, b) {
+      const s = r + g + b;
+      const val = ch === 0 ? r : ch === 1 ? g : b;
+      return s > MIN_BRIGHTNESS && val / s > RATIO_THRESHOLD && val > MIN_BRIGHTNESS &&
+             (ch !== 0 ? r : g) < CROSS_MAX && (ch !== 2 ? b : g) < CROSS_MAX;
+    };
+  }
+
+  const colorTests = {
+    red:    makePrimaryTest(0),
+    green:  makePrimaryTest(1),
+    blue:   makePrimaryTest(2),
+    yellow: function(r, g, b) {
+      const s = r + g + b;
+      return r > YELLOW_MIN && g > YELLOW_MIN && b < YELLOW_BLUE_MAX && (r + g) / s > YELLOW_RG_RATIO;
+    }
+  };
+
   function findColorCentroid(data, width, height, colorTest) {
     let sumX = 0, sumY = 0, count = 0;
     for (let y = 0; y < height; y++) {
@@ -25,13 +45,6 @@ window.ColorDetector = (function() {
     if (count < MIN_PIXEL_COUNT) return null;
     return { x: sumX / count, y: sumY / count };
   }
-
-  const colorTests = {
-    red:    (r, g, b) => { const s = r + g + b; return s > MIN_BRIGHTNESS && r / s > RATIO_THRESHOLD && r > MIN_BRIGHTNESS && g < CROSS_MAX && b < CROSS_MAX; },
-    green:  (r, g, b) => { const s = r + g + b; return s > MIN_BRIGHTNESS && g / s > RATIO_THRESHOLD && g > MIN_BRIGHTNESS && r < CROSS_MAX && b < CROSS_MAX; },
-    blue:   (r, g, b) => { const s = r + g + b; return s > MIN_BRIGHTNESS && b / s > RATIO_THRESHOLD && b > MIN_BRIGHTNESS && r < CROSS_MAX && g < CROSS_MAX; },
-    yellow: (r, g, b) => { const s = r + g + b; return r > YELLOW_MIN && g > YELLOW_MIN && b < YELLOW_BLUE_MAX && (r + g) / s > YELLOW_RG_RATIO; }
-  };
 
   function smooth(prev, next) {
     if (!prev) return next;

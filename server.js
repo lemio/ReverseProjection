@@ -9,7 +9,7 @@ const io = new Server(server);
 
 // In-memory rate limiter: 120 HTTP requests per IP per minute across all routes
 const httpRateMap = new Map();
-app.use((req, res, next) => {
+function rateLimit(req, res, next) {
   const ip  = req.ip || (req.socket && req.socket.remoteAddress) || 'unknown';
   const now = Date.now();
   const entry = httpRateMap.get(ip) || { count: 0, resetAt: now + 60_000 };
@@ -20,10 +20,11 @@ app.use((req, res, next) => {
     return res.status(429).send('Too Many Requests');
   }
   next();
-});
+}
+app.use(rateLimit);
 
 // Serve the phone PWA index for both /phone and /phone/
-app.get(['/phone', '/phone/'], (req, res) => {
+app.get(['/phone', '/phone/'], rateLimit, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'phone', 'index.html'));
 });
 
