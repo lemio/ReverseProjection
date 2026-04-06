@@ -120,7 +120,8 @@ html, body {
 }
 
 /* In tldraw mode push the content down an extra 44px so the tldraw top toolbar
-   is not hidden behind the AR marker. */
+   is not hidden behind the AR marker.
+   Total = marker height (min(75vw, 280px)) + 8px gap + 44px tldraw toolbar. */
 #phone-app.tldraw-mode #example-content {
   margin-top: calc(min(75vw, 280px) + 52px);
 }

@@ -152,7 +152,11 @@
   });
 
   var DETECT_W   = 640, DETECT_H = 480;
-  var WB_W       = 10000, WB_H = 10000;  // Whiteboard coordinate space
+  // Whiteboard coordinate space: 10 000 × 10 000 gives sub-pixel precision
+  // when mapping normalised camera positions (0-1) → integer WB coords while
+  // keeping arithmetic simple.  tldraw uses its own separate coordinate system
+  // and is not bound by these values.
+  var WB_W       = 10000, WB_H = 10000;
   var frameCount = 0;
   var anyDetected = false;
   var stateEmitCount = 0;
