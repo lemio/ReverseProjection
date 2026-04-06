@@ -72,9 +72,24 @@ window.TldrawPhone = (function () {
       var rootEl = document.getElementById('tdlp-root');
       if (!rootEl) return;
 
+      // Hide all desktop-only UI panels; keep only the bottom Toolbar and
+      // StylePanel which are the only controls appropriate for a phone screen.
+      var phoneComponents = {
+        MainMenu:        null,  // hamburger menu (top-left)
+        PageMenu:        null,  // page selector (top-centre)
+        QuickActions:    null,  // undo/redo/group buttons (top toolbar area)
+        ActionsMenu:     null,  // actions dropdown (top toolbar area)
+        SharePanel:      null,  // share button (top-right)
+        NavigationPanel: null,  // zoom in/out controls (bottom-right) — view is AR-driven
+        HelpMenu:        null,  // help button (bottom-right corner)
+        DebugPanel:      null,  // debug info panel
+        TopPanel:        null,  // entire top-panel region (safety-net catch-all)
+      };
+
       _root = createRoot(rootEl);
       _root.render(
         React.createElement(TL.Tldraw, {
+          components: phoneComponents,
           onMount: function (editor) { _onMount(editor); }
         })
       );
