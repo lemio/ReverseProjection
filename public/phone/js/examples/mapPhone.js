@@ -170,8 +170,9 @@ window.MapPhone = (function() {
     var dx = touch.clientX - wx;
     var dy = touch.clientY - wy;
 
-    // Un-rotate: apply inverse of CSS rotation.
-    // CSS rotate(-θ) was applied; to invert, rotate by +θ.
+    // Un-rotate: the map container has CSS rotate(-rotation) applied.
+    // To find the unrotated canvas coords from a touch point, apply the
+    // inverse transform, i.e. rotate by +rotation.
     var ux = Math.cos(rotation) * dx - Math.sin(rotation) * dy;
     var uy = Math.sin(rotation) * dx + Math.cos(rotation) * dy;
 
