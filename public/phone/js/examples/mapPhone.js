@@ -23,11 +23,23 @@ window.MapPhone = (function() {
   var stateLogCount = 0;
   var resizeHandler = null;
 
+  // The EXPAND factor makes the map container larger than its wrapper so that
+  // rotation does not clip the tiles at the edges.
+  var EXPAND = 1.5; // inner map is 150% width & height, centred via negative margin
+
   function init(el, sendFn) {
     sendTouch = sendFn;
-    el.innerHTML = '<div id="phone-map" style="width:100%;min-height:0;flex:1;"></div>';
+    // Outer wrapper clips to the visible area; inner div is oversized for rotation.
+    el.innerHTML =
+      '<div id="phone-map-wrap" style="position:relative;width:100%;height:100%;' +
+      '     overflow:hidden;flex:1;min-height:0;">' +
+      '  <div id="phone-map" style="position:absolute;' +
+      '    width:' + (EXPAND * 100) + '%;height:' + (EXPAND * 100) + '%;' +
+      '    top:' + (-(EXPAND - 1) / 2 * 100) + '%;' +
+      '    left:' + (-(EXPAND - 1) / 2 * 100) + '%;"></div>' +
+      '</div>';
+
     console.log('[MapPhone] init: creating Leaflet map after 80ms delay');
-    // Slight delay so the container has layout dimensions
     setTimeout(function() {
       var container = document.getElementById('phone-map');
       console.log('[MapPhone] container size:', container.offsetWidth, 'x', container.offsetHeight);
@@ -62,14 +74,14 @@ window.MapPhone = (function() {
       resizeHandler = function() { if (map) map.invalidateSize(); };
       window.addEventListener('resize', resizeHandler);
 
-      // Touch drawing
-      var mapContainer = map.getContainer();
-      mapContainer.addEventListener('touchstart', onTouchStart, { passive: false });
-      mapContainer.addEventListener('touchmove',  onTouchMove,  { passive: false });
-      mapContainer.addEventListener('touchend',   onTouchEnd,   { passive: false });
-      mapContainer.addEventListener('mousedown',  onMouseDown);
-      mapContainer.addEventListener('mousemove',  onMouseMove);
-      mapContainer.addEventListener('mouseup',    onMouseUp);
+      // Touch drawing — attach to wrapper so events fire before CSS rotation
+      var wrapper = document.getElementById('phone-map-wrap');
+      wrapper.addEventListener('touchstart', onTouchStart, { passive: false });
+      wrapper.addEventListener('touchmove',  onTouchMove,  { passive: false });
+      wrapper.addEventListener('touchend',   onTouchEnd,   { passive: false });
+      wrapper.addEventListener('mousedown',  onMouseDown);
+      wrapper.addEventListener('mousemove',  onMouseMove);
+      wrapper.addEventListener('mouseup',    onMouseUp);
 
       // Re-apply last received state if we got it before init
       if (lastState) {
@@ -124,24 +136,59 @@ window.MapPhone = (function() {
       console.log('[MapPhone] Phone not detected — map stays at current view');
     }
 
-    // Apply rotation: rotate the map container to match the phone's physical orientation
+    // Apply rotation: rotate the oversized inner map container.
+    // The outer wrapper (overflow:hidden) clips to the visible viewport so the
+    // oversized inner div absorbs any edge that would otherwise be cut off.
     var rotation = (state.mapRotation != null) ? state.mapRotation : 0;
     var container = map.getContainer();
     if (rotation !== 0) {
       container.style.transformOrigin = 'center center';
-      container.style.transform = 'rotate(' + rotation.toFixed(4) + 'rad)';
+      container.style.transform = 'rotate(' + (-rotation).toFixed(4) + 'rad)';
     } else {
       container.style.transform = '';
     }
   }
 
-  // Convert a touch/mouse event to a Leaflet LatLng
+  // Convert a touch/mouse event to a Leaflet LatLng.
+  // When the map container is rotated we must un-rotate the touch point relative
+  // to the wrapper centre before passing it to Leaflet's coordinate system.
   function eventToLatLng(e) {
     if (!map) return null;
-    var touch = e.touches ? e.touches[0] : e;
-    var rect  = map.getContainer().getBoundingClientRect();
-    var px = touch.clientX - rect.left;
-    var py = touch.clientY - rect.top;
+    var touch   = e.touches ? e.touches[0] : e;
+    var rotation = (lastState && lastState.mapRotation) ? lastState.mapRotation : 0;
+
+    // The map container (inner div) is EXPAND× larger than the wrapper.
+    // Touch events are captured on the wrapper — convert to the inner map's space.
+    var wrapper = document.getElementById('phone-map-wrap');
+    var wrapRect = wrapper ? wrapper.getBoundingClientRect() : map.getContainer().getBoundingClientRect();
+
+    // Centre of the visible (wrapper) area in screen pixels
+    var wx = wrapRect.left + wrapRect.width  / 2;
+    var wy = wrapRect.top  + wrapRect.height / 2;
+
+    // Touch position relative to wrapper centre
+    var dx = touch.clientX - wx;
+    var dy = touch.clientY - wy;
+
+    // Un-rotate: the map container has CSS rotate(-rotation) applied.
+    // To find the unrotated canvas coords from a touch point, apply the
+    // inverse transform, i.e. rotate by +rotation.
+    var ux = Math.cos(rotation) * dx - Math.sin(rotation) * dy;
+    var uy = Math.sin(rotation) * dx + Math.cos(rotation) * dy;
+
+    // The Leaflet container is EXPAND× the wrapper.
+    // Leaf's containerPointToLatLng expects coords relative to the map container's
+    // own top-left corner. The container is centred in (and extends beyond) the
+    // wrapper, so the container's top-left is at:
+    //   wrapper_centre - EXPAND * wrapper_size / 2
+    // In relative terms (from wrapper centre):
+    //   container_half_w = EXPAND * wrapRect.width  / 2
+    //   container_half_h = EXPAND * wrapRect.height / 2
+    var cHalfW = EXPAND * wrapRect.width  / 2;
+    var cHalfH = EXPAND * wrapRect.height / 2;
+    var px = ux + cHalfW;
+    var py = uy + cHalfH;
+
     return map.containerPointToLatLng([px, py]);
   }
 
@@ -201,17 +248,18 @@ window.MapPhone = (function() {
       window.removeEventListener('resize', resizeHandler);
       resizeHandler = null;
     }
-    if (map) {
-      var container = map.getContainer();
-      container.removeEventListener('touchstart', onTouchStart);
-      container.removeEventListener('touchmove',  onTouchMove);
-      container.removeEventListener('touchend',   onTouchEnd);
-      container.removeEventListener('mousedown',  onMouseDown);
-      container.removeEventListener('mousemove',  onMouseMove);
-      container.removeEventListener('mouseup',    onMouseUp);
-      map.remove();
-      map = null;
+    // Remove listeners from wrapper (new) or container (fallback)
+    var wrapper = document.getElementById('phone-map-wrap');
+    var evtTarget = wrapper || (map && map.getContainer());
+    if (evtTarget) {
+      evtTarget.removeEventListener('touchstart', onTouchStart);
+      evtTarget.removeEventListener('touchmove',  onTouchMove);
+      evtTarget.removeEventListener('touchend',   onTouchEnd);
+      evtTarget.removeEventListener('mousedown',  onMouseDown);
+      evtTarget.removeEventListener('mousemove',  onMouseMove);
+      evtTarget.removeEventListener('mouseup',    onMouseUp);
     }
+    if (map) { map.remove(); map = null; }
     drawLayer    = null;
     currentPath  = null;
     sendTouch    = null;

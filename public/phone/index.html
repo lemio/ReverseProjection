@@ -13,8 +13,11 @@
 </head>
 <body>
   <div id="phone-app">
-    <!-- Single centred 3x3 barcode marker (ID 0) detected by jsartoolkit5 -->
+    <!-- AR marker — fixed size, always visible at the top -->
     <canvas id="marker-single" data-marker-id="0"></canvas>
+
+    <!-- Spinner shown in top-right when the laptop can't see the marker -->
+    <div id="detect-spinner"></div>
 
     <!-- Connecting overlay — shown briefly while the socket handshakes -->
     <div id="connecting-screen">
@@ -38,13 +41,32 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/phone/js/drawMarker.js"></script>
   <script src="/phone/js/examples/mapPhone.js"></script>
+  <script src="/phone/js/examples/tldrawPhone.js"></script>
+  <script>
+    // Generate or retrieve a stable client ID BEFORE phoneApp.js runs.
+    // This must come before phoneApp.js is loaded so that window.RP_CLIENT_ID
+    // is available when phoneApp.js executes its IIFE.
+    (function() {
+      var stored = localStorage.getItem('rpClientId');
+      if (!stored) {
+        // Standard UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+        stored = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          var r = Math.random() * 16 | 0;
+          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+        localStorage.setItem('rpClientId', stored);
+      }
+      window.RP_CLIENT_ID = stored;
+    })();
+  </script>
   <script src="/phone/js/phoneApp.js"></script>
   <script>
-    // Draw the single 3x3 barcode marker onto the canvas
+    // Draw initial marker (ID 0) — phoneApp.js will redraw with the server-assigned ID
     (function() {
       var s = document.getElementById('marker-single');
-      drawJSARMarker(s, parseInt(s.dataset.markerId, 10), s.offsetWidth || 280);
+      drawJSARMarker(s, 0, s.offsetWidth || 280);
     })();
+
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/phone/sw.js').catch(console.error);
     }

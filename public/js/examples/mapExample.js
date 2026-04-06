@@ -60,6 +60,9 @@ window.MapExample = (function() {
     return L.latLng(north - ny * (north - south), west + nx * (east - west));
   }
 
+  // Latest marker info passed by app.js (contains wbVpW/H for accurate rect)
+  var lastMarkerInfo = null;
+
   function onPhonePosition(nx, ny, rotation) {
     phoneNX = nx;
     phoneNY = ny;
@@ -85,6 +88,15 @@ window.MapExample = (function() {
     }
   }
 
+  // onAllMarkersPosition: called by app.js with the full marker map.
+  // MapExample only cares about marker 0 (or the first detected marker).
+  function onAllMarkersPosition(markerInfos) {
+    var info = markerInfos[0] || Object.values(markerInfos)[0] || null;
+    if (!info) return;
+    lastMarkerInfo = info;
+    onPhonePosition(info.nx, info.ny, info.rotation);
+  }
+
   function onDetectionChange(isDetected) {
     detected = isDetected;
     if (!isDetected && phoneViewRect) {
@@ -95,21 +107,36 @@ window.MapExample = (function() {
     console.log('[MapExample] onDetectionChange → detected=' + isDetected);
   }
 
-  // Calculate and draw the rectangle representing the phone's visible map area.
-  // The phone renders its mini-map at (mapZoom + 3) centred on the phone's lat/lng.
-  // A representative phone viewport of 200 x 400 px is used for the calculation.
+  // Calculate and draw the polygon representing the phone's visible map area,
+  // rotated to match the phone's physical tilt angle.
+  // Uses actual phone drawing-area size derived from marker scale when available,
+  // falling back to a representative 200 × 400 px viewport otherwise.
   function updatePhoneViewRect() {
     var center = cameraToLatLng(phoneNX, phoneNY);
-    var phoneZoom = Math.min(18, map.getZoom() + 3);
-    var halfW = 100; // half of representative phone viewport width in px
-    var halfH = 200; // half of representative phone viewport height in px
-    var centerPx = map.project(center, phoneZoom);
-    var sw = map.unproject(L.point(centerPx.x - halfW, centerPx.y + halfH), phoneZoom);
-    var ne = map.unproject(L.point(centerPx.x + halfW, centerPx.y - halfH), phoneZoom);
-    var bounds = L.latLngBounds(sw, ne);
+    var halfLng, halfLat;
+
+    if (lastMarkerInfo && lastMarkerInfo.scale && lastMarkerInfo.drawAreaW) {
+      // Use the actual camera dimensions for a geometrically correct extent.
+      var halfNW = lastMarkerInfo.drawAreaW * lastMarkerInfo.scale / (2 * lastMarkerInfo.camW);
+      var halfNH = lastMarkerInfo.drawAreaH * lastMarkerInfo.scale / (2 * lastMarkerInfo.camH);
+      var bounds = map.getBounds();
+      halfLng = halfNW * (bounds.getEast()  - bounds.getWest());
+      halfLat = halfNH * (bounds.getNorth() - bounds.getSouth());
+    } else {
+      // Legacy fallback: representative 200 × 400 px at zoom+3
+      var phoneZoom = Math.min(18, map.getZoom() + 3);
+      var centerPx  = map.project(center, phoneZoom);
+      var sw = map.unproject(L.point(centerPx.x - 100, centerPx.y + 200), phoneZoom);
+      var ne = map.unproject(L.point(centerPx.x + 100, centerPx.y - 200), phoneZoom);
+      halfLng = (ne.lng - sw.lng) / 2;
+      halfLat = (ne.lat - sw.lat) / 2;
+    }
+
+    var rotation = rotationEnabled ? phoneRotation : 0;
+    var corners  = _rotatedCorners(center, halfLng, halfLat, rotation);
 
     if (!phoneViewRect) {
-      phoneViewRect = L.rectangle(bounds, {
+      phoneViewRect = L.polygon(corners, {
         color: '#4d7cfe',
         weight: 2,
         fill: true,
@@ -120,8 +147,37 @@ window.MapExample = (function() {
       }).addTo(map);
       phoneViewRect.bindTooltip('Phone viewport', { permanent: false, direction: 'top' });
     } else {
-      phoneViewRect.setBounds(bounds);
+      phoneViewRect.setLatLngs(corners);
     }
+  }
+
+  // Compute 4 corners of a rectangle (halfLng × halfLat) centred at `center`,
+  // rotated clockwise by `rotation` radians in geographic (east-north) space.
+  //
+  // In geographic coordinates x = east (longitude) and y = north (latitude).
+  // A clockwise rotation by θ (matching the camera's atan2 angle for the phone)
+  // uses the matrix [ cosθ  sinθ ; −sinθ  cosθ ]:
+  //   dlng' =  dx·cosθ + dy·sinθ   (new east offset)
+  //   dlat' = −dx·sinθ + dy·cosθ   (new north offset, sign follows y=north convention)
+  // The negative sign on sinθ for dlat is correct because north=+y in geography
+  // but down=+y in camera/screen space, so the y-axis is already accounted for
+  // in how `rotation` is measured (atan2 of camera coordinates).
+  function _rotatedCorners(center, halfLng, halfLat, rotation) {
+    var cosR = Math.cos(rotation), sinR = Math.sin(rotation);
+    // Local corners: [dlng, dlat] before rotation (NW, NE, SE, SW order → closes polygon)
+    var local = [
+      [-halfLng,  halfLat],
+      [ halfLng,  halfLat],
+      [ halfLng, -halfLat],
+      [-halfLng, -halfLat]
+    ];
+    return local.map(function (c) {
+      var dx = c[0], dy = c[1];
+      return L.latLng(
+        center.lat + (-dx * sinR + dy * cosR),  // dlat' = −dx·sinθ + dy·cosθ
+        center.lng + ( dx * cosR + dy * sinR)   // dlng' =  dx·cosθ + dy·sinθ
+      );
+    });
   }
 
   function onPhoneTouch(data) {
@@ -184,14 +240,18 @@ window.MapExample = (function() {
 
   function destroy() {
     if (map) { map.remove(); map = null; }
-    drawingLayer = null;
-    currentPath = null;
+    drawingLayer  = null;
+    currentPath   = null;
     phoneViewRect = null;
+    lastMarkerInfo = null;
     isDrawing = false;
-    detected = false;
+    detected  = false;
     positionLogCount = 0;
     console.log('[MapExample] destroyed');
   }
 
-  return { init, onPhonePosition, onDetectionChange, onPhoneTouch, getState, destroy, setRotationEnabled };
+  return {
+    init, onPhonePosition, onAllMarkersPosition, onDetectionChange,
+    onPhoneTouch, getState, destroy, setRotationEnabled
+  };
 })();
