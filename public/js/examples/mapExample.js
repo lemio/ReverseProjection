@@ -60,6 +60,9 @@ window.MapExample = (function() {
     return L.latLng(north - ny * (north - south), west + nx * (east - west));
   }
 
+  // Latest marker info passed by app.js (contains wbVpW/H for accurate rect)
+  var lastMarkerInfo = null;
+
   function onPhonePosition(nx, ny, rotation) {
     phoneNX = nx;
     phoneNY = ny;
@@ -85,6 +88,15 @@ window.MapExample = (function() {
     }
   }
 
+  // onAllMarkersPosition: called by app.js with the full marker map.
+  // MapExample only cares about marker 0 (or the first detected marker).
+  function onAllMarkersPosition(markerInfos) {
+    var info = markerInfos[0] || Object.values(markerInfos)[0] || null;
+    if (!info) return;
+    lastMarkerInfo = info;
+    onPhonePosition(info.nx, info.ny, info.rotation);
+  }
+
   function onDetectionChange(isDetected) {
     detected = isDetected;
     if (!isDetected && phoneViewRect) {
@@ -96,20 +108,39 @@ window.MapExample = (function() {
   }
 
   // Calculate and draw the rectangle representing the phone's visible map area.
-  // The phone renders its mini-map at (mapZoom + 3) centred on the phone's lat/lng.
-  // A representative phone viewport of 200 x 400 px is used for the calculation.
+  // Uses actual phone drawing-area size derived from marker scale when available,
+  // falling back to a representative 200 × 400 px viewport otherwise.
   function updatePhoneViewRect() {
     var center = cameraToLatLng(phoneNX, phoneNY);
-    var phoneZoom = Math.min(18, map.getZoom() + 3);
-    var halfW = 100; // half of representative phone viewport width in px
-    var halfH = 200; // half of representative phone viewport height in px
-    var centerPx = map.project(center, phoneZoom);
-    var sw = map.unproject(L.point(centerPx.x - halfW, centerPx.y + halfH), phoneZoom);
-    var ne = map.unproject(L.point(centerPx.x + halfW, centerPx.y - halfH), phoneZoom);
-    var bounds = L.latLngBounds(sw, ne);
+
+    var sw, ne;
+    if (lastMarkerInfo && lastMarkerInfo.scale && lastMarkerInfo.drawAreaW) {
+      // Compute the geographic bounds directly from the normalised viewport extents.
+      // wbVpW / WB_W = fraction of camera width covered by the drawing area.
+      var WB_W = 10000, WB_H = 10000;
+      var halfNW = (lastMarkerInfo.wbVpW / WB_W) / 2;
+      var halfNH = (lastMarkerInfo.wbVpH / WB_H) / 2;
+      var bounds = map.getBounds();
+      var north = bounds.getNorth(), south = bounds.getSouth();
+      var west  = bounds.getWest(),  east  = bounds.getEast();
+      var latSpan = north - south;
+      var lngSpan = east  - west;
+      sw = L.latLng(center.lat - halfNH * latSpan, center.lng - halfNW * lngSpan);
+      ne = L.latLng(center.lat + halfNH * latSpan, center.lng + halfNW * lngSpan);
+    } else {
+      // Legacy fallback: representative 200 × 400 px at zoom+3
+      var phoneZoom = Math.min(18, map.getZoom() + 3);
+      var halfW  = 100; // px
+      var halfH  = 200; // px
+      var centerPx = map.project(center, phoneZoom);
+      sw = map.unproject(L.point(centerPx.x - halfW, centerPx.y + halfH), phoneZoom);
+      ne = map.unproject(L.point(centerPx.x + halfW, centerPx.y - halfH), phoneZoom);
+    }
+
+    var rectBounds = L.latLngBounds(sw, ne);
 
     if (!phoneViewRect) {
-      phoneViewRect = L.rectangle(bounds, {
+      phoneViewRect = L.rectangle(rectBounds, {
         color: '#4d7cfe',
         weight: 2,
         fill: true,
@@ -120,7 +151,7 @@ window.MapExample = (function() {
       }).addTo(map);
       phoneViewRect.bindTooltip('Phone viewport', { permanent: false, direction: 'top' });
     } else {
-      phoneViewRect.setBounds(bounds);
+      phoneViewRect.setBounds(rectBounds);
     }
   }
 
@@ -184,14 +215,18 @@ window.MapExample = (function() {
 
   function destroy() {
     if (map) { map.remove(); map = null; }
-    drawingLayer = null;
-    currentPath = null;
+    drawingLayer  = null;
+    currentPath   = null;
     phoneViewRect = null;
+    lastMarkerInfo = null;
     isDrawing = false;
-    detected = false;
+    detected  = false;
     positionLogCount = 0;
     console.log('[MapExample] destroyed');
   }
 
-  return { init, onPhonePosition, onDetectionChange, onPhoneTouch, getState, destroy, setRotationEnabled };
+  return {
+    init, onPhonePosition, onAllMarkersPosition, onDetectionChange,
+    onPhoneTouch, getState, destroy, setRotationEnabled
+  };
 })();

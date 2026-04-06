@@ -78,7 +78,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('phone:touch',   (data) => { socket.to(ROOM).emit('phone:touch',   data); });
+  socket.on('phone:touch',    (data) => { socket.to(ROOM).emit('phone:touch',    data); });
+  socket.on('phone:viewport', (data) => { socket.to(ROOM).emit('phone:viewport', data); });
   socket.on('laptop:state',  (data) => { socket.to(ROOM).emit('laptop:state',  data); });
   socket.on('config:change', (data) => { socket.to(ROOM).emit('config:change', data); });
 

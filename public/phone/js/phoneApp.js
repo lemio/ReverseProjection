@@ -1,28 +1,49 @@
 (function() {
+  // ── Marker ID — read from ?id= URL param (default 0) ─────────────────────
+  var PHONE_MARKER_ID = (function() {
+    var p = new URLSearchParams(window.location.search);
+    return parseInt(p.get('id') || '0', 10);
+  })();
+
   var socket = null;
   var currentExample = 'map';
-  var examples = { map: window.MapPhone };
+  var examples = { map: window.MapPhone, tldraw: window.TldrawPhone };
   var activePhoneExample = null;
   var stateCount = 0;
 
   function redrawMarker() {
     var s = document.getElementById('marker-single');
-    if (s) drawJSARMarker(s, parseInt(s.dataset.markerId, 10), s.offsetWidth || 280);
+    if (s) drawJSARMarker(s, PHONE_MARKER_ID, s.offsetWidth || 280);
+  }
+
+  // Emit viewport dimensions so the laptop can compute the correct scale.
+  function emitViewport() {
+    if (!socket) return;
+    var s      = document.getElementById('marker-single');
+    var content = document.getElementById('example-content');
+    socket.emit('phone:viewport', {
+      markerId:       PHONE_MARKER_ID,
+      markerDisplayPx: s ? (s.offsetWidth || 280) : 280,
+      drawAreaW:       content ? (content.offsetWidth  || 375) : 375,
+      drawAreaH:       content ? (content.offsetHeight || 500) : 500
+    });
   }
 
   function connect() {
     socket = io();
 
     socket.on('connect', function() {
-      socket.emit('device:register', { type: 'phone' });
+      socket.emit('device:register', { type: 'phone', markerId: PHONE_MARKER_ID });
       stateCount = 0;
       document.getElementById('connecting-screen').style.display = 'none';
       document.getElementById('example-area').style.display = 'flex';
       var indicator = document.getElementById('connection-indicator');
       indicator.className = 'connected';
       indicator.textContent = 'Live';
-      console.log('[PhoneApp] Connected');
+      console.log('[PhoneApp] Connected | markerId=' + PHONE_MARKER_ID);
       switchExample(currentExample);
+      // Small delay so the layout is ready before measuring
+      setTimeout(emitViewport, 200);
     });
 
     socket.on('disconnect', function() {
@@ -40,6 +61,7 @@
       if (stateCount % 30 === 1) {
         console.log('[PhoneApp] laptop:state #' + stateCount +
           ' | detected=' + (state && state.detected) +
+          ' | type=' + (state && state.type) +
           ' | hasExample=' + (activePhoneExample !== null));
       }
 
@@ -54,9 +76,11 @@
       if (nowSearching !== wasSearching) {
         phoneApp.classList.toggle('searching', nowSearching);
         console.log('[PhoneApp] searching ' + (nowSearching ? 'ON' : 'OFF'));
-        // Redraw marker after CSS transition finishes (size changed)
-        setTimeout(redrawMarker, 450);
-        // Notify the active example that its container may have changed size
+        // Redraw marker after CSS transition finishes (size changed) then re-emit
+        setTimeout(function() {
+          redrawMarker();
+          emitViewport();
+        }, 450);
         if (activePhoneExample && activePhoneExample.invalidate) {
           setTimeout(function() { activePhoneExample.invalidate(); }, 450);
         }
@@ -66,16 +90,24 @@
 
   function switchExample(name) {
     currentExample = name;
-    document.getElementById('example-name').textContent = name === 'map' ? 'Map' : name;
+    var displayNames = { map: 'Map', tldraw: 'Draw' };
+    document.getElementById('example-name').textContent = displayNames[name] || name;
     if (activePhoneExample && activePhoneExample.destroy) activePhoneExample.destroy();
     activePhoneExample = examples[name] || null;
     var contentEl = document.getElementById('example-content');
     if (activePhoneExample && activePhoneExample.init) {
-      activePhoneExample.init(contentEl, function(data) {
-        if (socket) socket.emit('phone:touch', data);
-      });
+      activePhoneExample.init(
+        contentEl,
+        function(data) { if (socket) socket.emit('phone:touch', data); },
+        PHONE_MARKER_ID
+      );
     }
+    // Re-send viewport after switching (layout may have changed)
+    setTimeout(emitViewport, 300);
   }
+
+  // Re-emit viewport on orientation / resize changes
+  window.addEventListener('resize', function() { setTimeout(emitViewport, 200); });
 
   // Auto-connect immediately — no room code needed
   connect();

@@ -18,7 +18,8 @@ window.JSARDetector = (function () {
   var MARKER_ID = 0;
 
   var ALPHA = 0.3;
-  var smoothed = { tl: null, tr: null, br: null, bl: null };
+  // smoothed is now a map: {markerId: {tl, tr, br, bl}}
+  var smoothed = {};
 
   var controller  = null;
   var initStarted = false;
@@ -69,68 +70,76 @@ window.JSARDetector = (function () {
     );
   }
 
-  /* ── Main detection ─────────────────────────────────────────────────── */
-  function detect(video) {
+  /* ── Extract corners from a raw marker ─────────────────────────────── */
+  function extractCorners(target) {
+    var dir = target.dir;
+    var v   = target.vertex;
+    return {
+      topLeft:     { x: v[(4 - dir) % 4][0], y: v[(4 - dir) % 4][1] },
+      topRight:    { x: v[(5 - dir) % 4][0], y: v[(5 - dir) % 4][1] },
+      bottomRight: { x: v[(6 - dir) % 4][0], y: v[(6 - dir) % 4][1] },
+      bottomLeft:  { x: v[(7 - dir) % 4][0], y: v[(7 - dir) % 4][1] }
+    };
+  }
+
+  /* ── Detect ALL visible markers → {id: corners, …} or null ─────────── */
+  function detectAll(video) {
     if (!isReady) {
       if (!initStarted) init();
       return null;
     }
 
     callCount++;
-
     controller.detectMarker(video);
     var markerNum = controller.getMarkerNum();
 
-    var target = null;
+    if (markerNum === 0) {
+      if (callCount % 30 === 1) {
+        console.log('[JSARDetector] #' + callCount + ': No markers detected');
+      }
+      return null;
+    }
+
+    var result = {};
     for (var i = 0; i < markerNum; i++) {
       var m = controller.cloneMarkerInfo(controller.getMarker(i));
-      if (m && m.idMatrix === MARKER_ID) { target = m; break; }
+      if (!m || m.idMatrix < 0) continue;
+      var id = m.idMatrix;
+      if (!smoothed[id]) smoothed[id] = { tl: null, tr: null, br: null, bl: null };
+      var raw = extractCorners(m);
+      smoothed[id].tl = smooth(smoothed[id].tl, raw.topLeft);
+      smoothed[id].tr = smooth(smoothed[id].tr, raw.topRight);
+      smoothed[id].br = smooth(smoothed[id].br, raw.bottomRight);
+      smoothed[id].bl = smooth(smoothed[id].bl, raw.bottomLeft);
+      result[id] = {
+        topLeft:     { x: smoothed[id].tl.x, y: smoothed[id].tl.y },
+        topRight:    { x: smoothed[id].tr.x, y: smoothed[id].tr.y },
+        bottomRight: { x: smoothed[id].br.x, y: smoothed[id].br.y },
+        bottomLeft:  { x: smoothed[id].bl.x, y: smoothed[id].bl.y }
+      };
     }
 
     if (callCount % 30 === 1) {
-      if (!target) {
-        var allIds = [];
-        for (var j = 0; j < markerNum; j++) {
-          var inf = controller.getMarker(j);
-          if (inf) allIds.push(inf.idMatrix);
-        }
-        console.log('[JSARDetector] #' + callCount + ': Marker ' + MARKER_ID + ' not found' +
-          (allIds.length ? ' | Seen IDs=' + JSON.stringify(allIds) : ' | No markers'));
-      } else {
-        console.log('[JSARDetector] #' + callCount + ': Marker ' + MARKER_ID + ' found' +
-          ' | pos=(' + Math.round(target.pos[0]) + ',' + Math.round(target.pos[1]) + ')');
-      }
+      console.log('[JSARDetector] #' + callCount +
+        ': Detected IDs=' + JSON.stringify(Object.keys(result)));
     }
 
-    if (!target) return null;
+    return Object.keys(result).length > 0 ? result : null;
+  }
 
-    /* vertex[(4-dir)%4] is the top-left corner; proceed clockwise */
-    var dir = target.dir;
-    var v   = target.vertex;
-    var tl  = { x: v[(4 - dir) % 4][0], y: v[(4 - dir) % 4][1] };
-    var tr  = { x: v[(5 - dir) % 4][0], y: v[(5 - dir) % 4][1] };
-    var br  = { x: v[(6 - dir) % 4][0], y: v[(6 - dir) % 4][1] };
-    var bl  = { x: v[(7 - dir) % 4][0], y: v[(7 - dir) % 4][1] };
-
-    smoothed.tl = smooth(smoothed.tl, tl);
-    smoothed.tr = smooth(smoothed.tr, tr);
-    smoothed.br = smooth(smoothed.br, br);
-    smoothed.bl = smooth(smoothed.bl, bl);
-
-    return {
-      topLeft:     { x: smoothed.tl.x, y: smoothed.tl.y },
-      topRight:    { x: smoothed.tr.x, y: smoothed.tr.y },
-      bottomRight: { x: smoothed.br.x, y: smoothed.br.y },
-      bottomLeft:  { x: smoothed.bl.x, y: smoothed.bl.y }
-    };
+  /* ── Single-marker detect (backward-compat — returns corners for ID 0) */
+  function detect(video) {
+    var all = detectAll(video);
+    if (!all) return null;
+    return all[MARKER_ID] || null;
   }
 
   /* ── Reset ──────────────────────────────────────────────────────────── */
   function reset() {
-    smoothed = { tl: null, tr: null, br: null, bl: null };
+    smoothed = {};
     callCount = 0;
     console.log('[JSARDetector] reset');
   }
 
-  return { init, detect, reset };
+  return { init, detect, detectAll, reset };
 })();

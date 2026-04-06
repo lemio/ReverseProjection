@@ -13,7 +13,7 @@
 </head>
 <body>
   <div id="phone-app">
-    <!-- Single centred 3x3 barcode marker (ID 0) detected by jsartoolkit5 -->
+    <!-- AR marker — ID comes from ?id= URL parameter (default 0) -->
     <canvas id="marker-single" data-marker-id="0"></canvas>
 
     <!-- Connecting overlay — shown briefly while the socket handshakes -->
@@ -38,12 +38,16 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/phone/js/drawMarker.js"></script>
   <script src="/phone/js/examples/mapPhone.js"></script>
+  <script src="/phone/js/examples/tldrawPhone.js"></script>
   <script src="/phone/js/phoneApp.js"></script>
   <script>
-    // Draw the single 3x3 barcode marker onto the canvas
+    // Read marker ID from ?id=N URL parameter (default 0)
     (function() {
+      var params   = new URLSearchParams(window.location.search);
+      var markerId = parseInt(params.get('id') || '0', 10);
       var s = document.getElementById('marker-single');
-      drawJSARMarker(s, parseInt(s.dataset.markerId, 10), s.offsetWidth || 280);
+      s.dataset.markerId = markerId;
+      drawJSARMarker(s, markerId, s.offsetWidth || 280);
     })();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/phone/sw.js').catch(console.error);

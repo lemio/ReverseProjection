@@ -5,7 +5,7 @@
 
   socket.on('device:status', function(data) {
     if (data.type === 'phone') {
-      var dot = document.querySelector('#phone-status .status-dot');
+      var dot   = document.querySelector('#phone-status .status-dot');
       var label = document.getElementById('phone-status');
       if (data.connected) {
         dot.className = 'status-dot connected';
@@ -21,8 +21,24 @@
     if (activeExample && activeExample.onPhoneTouch) activeExample.onPhoneTouch(data);
   });
 
-  // ── Phone link & QR code — use LAN IP so phone can reach the server ───────
-  var phoneUrl = window.location.origin + '/phone'; // fallback (works on laptop)
+  // ── Phone viewport dimensions (phone → laptop) ─────────────────────────────
+  // Keyed by markerId; defaults used until the phone reports its own dims.
+  var phoneViewportData = {};
+  socket.on('phone:viewport', function(data) {
+    if (data && data.markerId != null) {
+      phoneViewportData[data.markerId] = {
+        markerDisplayPx: data.markerDisplayPx || 280,
+        drawAreaW:       data.drawAreaW       || 375,
+        drawAreaH:       data.drawAreaH       || 500
+      };
+      console.log('[App] phone:viewport for markerId=' + data.markerId +
+        ' | markerDisplayPx=' + data.markerDisplayPx +
+        ' | drawArea=' + data.drawAreaW + 'x' + data.drawAreaH);
+    }
+  });
+
+  // ── Phone link & QR code ───────────────────────────────────────────────────
+  var phoneUrl = window.location.origin + '/phone';
 
   fetch('/api/config')
     .then(function(r) { return r.json(); })
@@ -39,16 +55,13 @@
     navigator.clipboard.writeText(phoneUrl).then(function() {
       btn.textContent = 'Copied!';
       setTimeout(function() { btn.textContent = 'Copy Phone Link'; }, 2000);
-    }).catch(function() {
-      prompt('Copy this link:', phoneUrl);
-    });
+    }).catch(function() { prompt('Copy this link:', phoneUrl); });
   });
 
   document.getElementById('qr-btn').addEventListener('click', function() {
     document.getElementById('qr-modal').classList.remove('hidden');
     document.getElementById('qr-url').textContent = phoneUrl;
     var img = document.getElementById('qr-image');
-    // Refresh QR whenever opened in case phoneUrl resolved after last open
     img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
       encodeURIComponent(phoneUrl);
   });
@@ -60,10 +73,10 @@
   });
 
   // ── Example switching ─────────────────────────────────────────────────────
-  var activeExample = null;
-  var currentExampleName = 'map';
-  var examples = { map: window.MapExample };
-  var panelEl = document.getElementById('example-panel');
+  var activeExample       = null;
+  var currentExampleName  = 'map';
+  var examples = { map: window.MapExample, tldraw: window.TldrawExample };
+  var panelEl  = document.getElementById('example-panel');
 
   function switchExample(name) {
     if (activeExample && activeExample.destroy) activeExample.destroy();
@@ -85,17 +98,16 @@
 
   // ── Invert toggle ─────────────────────────────────────────────────────────
   var invertControls = false;
-  var invertBtn = document.getElementById('invert-btn');
+  var invertBtn      = document.getElementById('invert-btn');
   invertBtn.addEventListener('click', function() {
     invertControls = !invertControls;
     invertBtn.textContent = invertControls ? 'Inverted' : 'Invert';
     invertBtn.classList.toggle('active', invertControls);
-    console.log('[App] invertControls =', invertControls);
   });
 
   // ── Rotation toggle ───────────────────────────────────────────────────────
   var useRotation = false;
-  var rotateBtn = document.getElementById('rotate-btn');
+  var rotateBtn   = document.getElementById('rotate-btn');
   rotateBtn.addEventListener('click', function() {
     useRotation = !useRotation;
     rotateBtn.textContent = useRotation ? 'Rotating' : 'No Rotation';
@@ -103,7 +115,6 @@
     if (activeExample && activeExample.setRotationEnabled) {
       activeExample.setRotationEnabled(useRotation);
     }
-    console.log('[App] useRotation =', useRotation);
   });
 
   // ── Webcam ────────────────────────────────────────────────────────────────
@@ -135,90 +146,163 @@
     console.error('[App] Webcam error:', err.message);
   });
 
-  var DETECT_W = 640, DETECT_H = 480;
+  var DETECT_W   = 640, DETECT_H = 480;
+  var WB_W       = 10000, WB_H = 10000;  // Whiteboard coordinate space
   var frameCount = 0;
-  var phoneDetected = false;
+  var anyDetected = false;
   var stateEmitCount = 0;
 
+  // ── Main detect loop ──────────────────────────────────────────────────────
   function detectLoop() {
     requestAnimationFrame(detectLoop);
     frameCount++;
     if (frameCount % 3 !== 0) return;
     if (!webcamVideo.videoWidth) return;
 
-    var corners = JSARDetector.detect(webcamVideo);
-    var phoneNX = null, phoneNY = null;
+    var W = webcamVideo.videoWidth;
+    var H = webcamVideo.videoHeight;
 
-    if (corners) {
-      var scaleX = webcamVideo.videoWidth  / DETECT_W;
-      var scaleY = webcamVideo.videoHeight / DETECT_H;
-      Object.keys(corners).forEach(function(key) {
-        corners[key] = { x: corners[key].x * scaleX, y: corners[key].y * scaleY };
+    // Detect all visible markers
+    var allCorners = JSARDetector.detectAll(webcamVideo);
+
+    // Scale corners from detection resolution to actual video resolution
+    if (allCorners) {
+      var scaleX = W / DETECT_W;
+      var scaleY = H / DETECT_H;
+      Object.keys(allCorners).forEach(function(idStr) {
+        var c = allCorners[idStr];
+        ['topLeft','topRight','bottomRight','bottomLeft'].forEach(function(key) {
+          c[key] = { x: c[key].x * scaleX, y: c[key].y * scaleY };
+        });
       });
     }
 
-    var nowDetected = corners !== null;
-    if (nowDetected !== phoneDetected) {
-      phoneDetected = nowDetected;
-      if (phoneDetected) {
-        setDetectionStatus('Tracking', 'tracking');
-      } else {
-        setDetectionStatus('Searching', 'searching');
-      }
-      console.log('[App] Detection status changed to ' + (phoneDetected ? 'TRACKING' : 'LOST'));
+    // Compute per-marker information
+    var markerInfos = {};
+    if (allCorners) {
+      Object.keys(allCorners).forEach(function(idStr) {
+        var id      = parseInt(idStr, 10);
+        var corners = allCorners[idStr];
+        var vp      = phoneViewportData[id] || { markerDisplayPx: 280, drawAreaW: 375, drawAreaH: 500 };
+
+        // Marker centre and apparent side length in camera pixels
+        var cx = (corners.topLeft.x + corners.topRight.x +
+                  corners.bottomLeft.x + corners.bottomRight.x) / 4;
+        var cy = (corners.topLeft.y + corners.topRight.y +
+                  corners.bottomLeft.y + corners.bottomRight.y) / 4;
+        var dx = corners.topRight.x - corners.topLeft.x;
+        var dy = corners.topRight.y - corners.topLeft.y;
+        var markerSidePx = Math.sqrt(dx * dx + dy * dy);
+        var rotation     = Math.atan2(dy, dx);
+
+        // Physical scale: camera pixels per phone CSS pixel
+        var scale = markerSidePx / (vp.markerDisplayPx || 280);
+
+        // ── Position fix ──────────────────────────────────────────────────
+        // The marker is at the top of the phone; the drawing area is below it.
+        // The "downward" direction on the phone expressed in camera coordinates
+        // is (-sin θ, cos θ) where θ = rotation (atan2 of the top-right edge).
+        // Offset from marker centre to drawing-area centre (in phone CSS px):
+        //   vertical = markerDisplayPx/2 + 8px gap + drawAreaH/2
+        var mdisp     = vp.markerDisplayPx || 280;
+        var daH       = vp.drawAreaH       || 500;
+        var daW       = vp.drawAreaW       || 375;
+        var offsetPhonePx = mdisp / 2 + 8 + daH / 2;
+        var offCamX   = -Math.sin(rotation) * offsetPhonePx * scale;
+        var offCamY   =  Math.cos(rotation) * offsetPhonePx * scale;
+
+        var drawCX = cx + offCamX;
+        var drawCY = cy + offCamY;
+
+        // Normalised position of the drawing-area centre
+        var phoneNX = invertControls ? 1 - drawCX / W : drawCX / W;
+        var phoneNY = invertControls ? 1 - drawCY / H : drawCY / H;
+
+        // WB viewport dimensions
+        var wbX   = phoneNX * WB_W;
+        var wbY   = phoneNY * WB_H;
+        var wbVpW = (daW * scale / W) * WB_W;
+        var wbVpH = (daH * scale / H) * WB_H;
+
+        markerInfos[id] = {
+          id:            id,
+          nx:            phoneNX,
+          ny:            phoneNY,
+          rotation:      rotation,
+          markerSidePx:  markerSidePx,
+          drawAreaW:     daW,
+          drawAreaH:     daH,
+          markerDisplayPx: mdisp,
+          scale:         scale,
+          wbX:           wbX,
+          wbY:           wbY,
+          wbVpW:         wbVpW,
+          wbVpH:         wbVpH,
+          corners:       corners
+        };
+      });
+    }
+
+    // Detection-status change
+    var nowDetected = Object.keys(markerInfos).length > 0;
+    if (nowDetected !== anyDetected) {
+      anyDetected = nowDetected;
+      setDetectionStatus(anyDetected ? 'Tracking' : 'Searching', anyDetected ? 'tracking' : 'searching');
+      console.log('[App] Detection status → ' + (anyDetected ? 'TRACKING' : 'LOST'));
       if (activeExample && activeExample.onDetectionChange) {
-        activeExample.onDetectionChange(phoneDetected);
+        activeExample.onDetectionChange(anyDetected);
       }
     }
 
-    if (corners && activeExample && activeExample.onPhonePosition) {
-      var W = webcamVideo.videoWidth, H = webcamVideo.videoHeight;
-      var center = {
-        x: (corners.topLeft.x + corners.topRight.x + corners.bottomLeft.x + corners.bottomRight.x) / 4,
-        y: (corners.topLeft.y + corners.topRight.y + corners.bottomLeft.y + corners.bottomRight.y) / 4
-      };
-      var dx = corners.topRight.x - corners.topLeft.x;
-      var dy = corners.topRight.y - corners.topLeft.y;
-      var rotation = Math.atan2(dy, dx);
-
-      phoneNX = invertControls ? 1 - center.x / W : center.x / W;
-      phoneNY = invertControls ? 1 - center.y / H : center.y / H;
-
-      activeExample.onPhonePosition(phoneNX, phoneNY, rotation);
-
-      stateEmitCount++;
-      if (activeExample.getState) {
-        var state = activeExample.getState();
-        socket.emit('laptop:state', state);
-        if (stateEmitCount % 60 === 1) {
-          console.log('[App] State emitted #' + stateEmitCount +
-            ' | nx=' + phoneNX.toFixed(3) + ' ny=' + phoneNY.toFixed(3) +
-            ' | rot=' + rotation.toFixed(2) + 'rad' +
-            ' | inverted=' + invertControls +
-            ' | phoneLat=' + (state && state.phoneLat != null ? state.phoneLat.toFixed(5) : 'null') +
-            ' | detected=' + (state && state.detected));
-        }
+    // ── Notify examples ───────────────────────────────────────────────────
+    if (nowDetected && activeExample) {
+      // Multi-marker API (e.g. TldrawExample)
+      if (activeExample.onAllMarkersPosition) {
+        activeExample.onAllMarkersPosition(markerInfos);
       }
-    } else if (!corners && activeExample && activeExample.getState) {
-      socket.emit('laptop:state', activeExample.getState());
+
+      // Single-marker API for backward compat (MapExample, PongExample)
+      // Use marker 0 if present, otherwise the first detected marker
+      var m0 = markerInfos[0] || Object.values(markerInfos)[0] || null;
+      if (m0 && activeExample.onPhonePosition) {
+        activeExample.onPhonePosition(m0.nx, m0.ny, m0.rotation);
+      }
     }
 
-    drawOverlay(corners, phoneNX, phoneNY,
-      activeExample && activeExample.getState ? activeExample.getState() : null);
+    // ── Emit state to phone(s) ────────────────────────────────────────────
+    stateEmitCount++;
+    if (activeExample && activeExample.getState) {
+      var state = activeExample.getState();
+      socket.emit('laptop:state', state);
+      if (stateEmitCount % 60 === 1) {
+        var m0 = markerInfos[0] || Object.values(markerInfos)[0] || null;
+        console.log('[App] State #' + stateEmitCount +
+          ' | detected=' + nowDetected +
+          (m0 ? ' | nx=' + m0.nx.toFixed(3) + ' ny=' + m0.ny.toFixed(3) +
+                ' rot=' + m0.rotation.toFixed(2) : '') +
+          ' | inverted=' + invertControls);
+      }
+    }
+
+    // ── Overlay ───────────────────────────────────────────────────────────
+    drawOverlay(markerInfos);
   }
 
-  function drawOverlay(corners, phoneNX, phoneNY, state) {
+  // ── Overlay drawing ───────────────────────────────────────────────────────
+  var PHONE_COLORS = ['#4d7cfe', '#e94560', '#f59e0b', '#34d399', '#a78bfa'];
+
+  function drawOverlay(markerInfos) {
     if (!webcamVideo.videoWidth) return;
-    var vw = webcamVideo.videoWidth;
-    var vh = webcamVideo.videoHeight;
+    var vw = webcamVideo.videoWidth, vh = webcamVideo.videoHeight;
     if (overlayCanvas.width !== vw || overlayCanvas.height !== vh) {
       overlayCanvas.width  = vw;
       overlayCanvas.height = vh;
     }
     overlayCtx.clearRect(0, 0, vw, vh);
 
-    if (!corners) {
-      // Searching indicator — amber dot + label
+    var ids = Object.keys(markerInfos);
+    if (ids.length === 0) {
+      // Searching indicator
       overlayCtx.fillStyle = 'rgba(245,158,11,0.9)';
       overlayCtx.beginPath();
       overlayCtx.arc(20, 20, 7, 0, Math.PI * 2);
@@ -229,66 +313,67 @@
       return;
     }
 
-    var pts = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft];
+    ids.forEach(function(idStr) {
+      var info   = markerInfos[idStr];
+      var corners = info.corners;
+      var color  = PHONE_COLORS[info.id % PHONE_COLORS.length];
+      var pts    = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft];
 
-    // Semi-transparent fill
-    overlayCtx.fillStyle = 'rgba(77,124,254,0.07)';
-    overlayCtx.beginPath();
-    overlayCtx.moveTo(pts[0].x, pts[0].y);
-    for (var i = 1; i < pts.length; i++) overlayCtx.lineTo(pts[i].x, pts[i].y);
-    overlayCtx.closePath();
-    overlayCtx.fill();
+      // Semi-transparent fill
+      overlayCtx.fillStyle = 'rgba(77,124,254,0.07)';
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(pts[0].x, pts[0].y);
+      for (var i = 1; i < pts.length; i++) overlayCtx.lineTo(pts[i].x, pts[i].y);
+      overlayCtx.closePath();
+      overlayCtx.fill();
 
-    // Outline
-    overlayCtx.strokeStyle = '#4d7cfe';
-    overlayCtx.lineWidth = 2;
-    overlayCtx.beginPath();
-    overlayCtx.moveTo(pts[0].x, pts[0].y);
-    for (var j = 1; j < pts.length; j++) overlayCtx.lineTo(pts[j].x, pts[j].y);
-    overlayCtx.closePath();
-    overlayCtx.stroke();
+      // Outline
+      overlayCtx.strokeStyle = color;
+      overlayCtx.lineWidth = 2;
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(pts[0].x, pts[0].y);
+      for (var j = 1; j < pts.length; j++) overlayCtx.lineTo(pts[j].x, pts[j].y);
+      overlayCtx.closePath();
+      overlayCtx.stroke();
 
-    // Centre crosshair
-    var cx = pts.reduce(function(s, p) { return s + p.x; }, 0) / 4;
-    var cy = pts.reduce(function(s, p) { return s + p.y; }, 0) / 4;
-    overlayCtx.strokeStyle = '#4d7cfe';
-    overlayCtx.lineWidth = 1.5;
-    overlayCtx.beginPath();
-    overlayCtx.moveTo(cx - 12, cy); overlayCtx.lineTo(cx + 12, cy);
-    overlayCtx.moveTo(cx, cy - 12); overlayCtx.lineTo(cx, cy + 12);
-    overlayCtx.stroke();
+      // Centre cross
+      var cx2 = pts.reduce(function(s, p) { return s + p.x; }, 0) / 4;
+      var cy2 = pts.reduce(function(s, p) { return s + p.y; }, 0) / 4;
+      overlayCtx.strokeStyle = color;
+      overlayCtx.lineWidth = 1.5;
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(cx2 - 12, cy2); overlayCtx.lineTo(cx2 + 12, cy2);
+      overlayCtx.moveTo(cx2, cy2 - 12); overlayCtx.lineTo(cx2, cy2 + 12);
+      overlayCtx.stroke();
 
-    // Info box
-    if (phoneNX !== null && phoneNY !== null) {
-      var lines = ['nx=' + phoneNX.toFixed(3) + '  ny=' + phoneNY.toFixed(3)];
-      if (state && state.phoneLat != null) {
-        lines.push('lat=' + state.phoneLat.toFixed(5));
-        lines.push('lng=' + state.phoneLng.toFixed(5));
-      }
-      if (invertControls) lines.push('INVERTED');
-      var boxX = Math.min(cx + 16, vw - 160);
-      var boxY = cy - 8;
-      var lineH = 15;
+      // Draw-area centre cross (corrected position)
+      overlayCtx.strokeStyle = '#34d399';
+      overlayCtx.lineWidth = 1.5;
+      var dcx = info.nx * vw, dcy = info.ny * vh;
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(dcx - 10, dcy); overlayCtx.lineTo(dcx + 10, dcy);
+      overlayCtx.moveTo(dcx, dcy - 10); overlayCtx.lineTo(dcx, dcy + 10);
+      overlayCtx.stroke();
+
+      // Rotation arrow from marker centre
+      var arrowLen = 28;
+      overlayCtx.strokeStyle = '#fbbf24';
+      overlayCtx.lineWidth = 2;
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(cx2, cy2);
+      overlayCtx.lineTo(cx2 + Math.cos(info.rotation) * arrowLen,
+                         cy2 + Math.sin(info.rotation) * arrowLen);
+      overlayCtx.stroke();
+
+      // Label
       overlayCtx.fillStyle = 'rgba(0,0,0,0.6)';
-      overlayCtx.fillRect(boxX - 4, boxY - 13, 155, lines.length * lineH + 6);
-      overlayCtx.fillStyle = '#4d7cfe';
+      overlayCtx.fillRect(cx2 + 14, cy2 - 13, 80, 18);
+      overlayCtx.fillStyle = color;
       overlayCtx.font = 'bold 11px monospace';
-      lines.forEach(function(line, i) {
-        overlayCtx.fillText(line, boxX, boxY + i * lineH);
-      });
-    }
-
-    // Rotation arrow
-    var adx = corners.topRight.x - corners.topLeft.x;
-    var ady = corners.topRight.y - corners.topLeft.y;
-    var angle = Math.atan2(ady, adx);
-    var arrowLen = 28;
-    overlayCtx.strokeStyle = '#fbbf24';
-    overlayCtx.lineWidth = 2;
-    overlayCtx.beginPath();
-    overlayCtx.moveTo(cx, cy);
-    overlayCtx.lineTo(cx + Math.cos(angle) * arrowLen, cy + Math.sin(angle) * arrowLen);
-    overlayCtx.stroke();
+      overlayCtx.fillText('ID ' + info.id +
+        '  ' + info.nx.toFixed(2) + ',' + info.ny.toFixed(2),
+        cx2 + 17, cy2);
+    });
   }
 
   // Start with the map example
