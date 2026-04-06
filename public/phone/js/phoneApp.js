@@ -44,6 +44,8 @@
       switchExample(currentExample);
       // Small delay so the layout is ready before measuring
       setTimeout(emitViewport, 200);
+      // Request any existing tldraw state from the server
+      socket.emit('tldraw:init-request');
     });
 
     socket.on('disconnect', function() {
@@ -86,6 +88,19 @@
         }
       }
     });
+
+    // ── tldraw store sync ────────────────────────────────────────────────
+    // Forward incoming diffs / snapshots to the active example.
+    socket.on('tldraw:diff', function(diff) {
+      if (activePhoneExample && activePhoneExample.onTldrawDiff) {
+        activePhoneExample.onTldrawDiff(diff);
+      }
+    });
+    socket.on('tldraw:snapshot', function(snapshot) {
+      if (activePhoneExample && activePhoneExample.onTldrawSnapshot) {
+        activePhoneExample.onTldrawSnapshot(snapshot);
+      }
+    });
   }
 
   function switchExample(name) {
@@ -98,7 +113,18 @@
     if (activePhoneExample && activePhoneExample.init) {
       activePhoneExample.init(
         contentEl,
-        function(data) { if (socket) socket.emit('phone:touch', data); },
+        function(data) {
+          if (!socket) return;
+          // tldrawPhone sends typed envelopes for the tldraw sync channel;
+          // everything else (map lat/lng touches) goes via phone:touch.
+          if (data && data.type === 'tldraw:diff') {
+            socket.emit('tldraw:diff', data.diff);
+          } else if (data && data.type === 'tldraw:snapshot') {
+            socket.emit('tldraw:snapshot', data.snapshot);
+          } else {
+            socket.emit('phone:touch', data);
+          }
+        },
         PHONE_MARKER_ID
       );
     }

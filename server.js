@@ -60,6 +60,9 @@ app.get('/api/config', (req, res) => {
 // Any connecting socket is a participant; laptops and phones find each other automatically.
 const ROOM = 'main';
 
+// Latest tldraw full-state snapshot — sent to devices that join mid-session.
+let tldrawSnapshot = null;
+
 io.on('connection', (socket) => {
   let myType = null;
 
@@ -82,6 +85,16 @@ io.on('connection', (socket) => {
   socket.on('phone:viewport', (data) => { socket.to(ROOM).emit('phone:viewport', data); });
   socket.on('laptop:state',  (data) => { socket.to(ROOM).emit('laptop:state',  data); });
   socket.on('config:change', (data) => { socket.to(ROOM).emit('config:change', data); });
+
+  // ── tldraw real-time sync ─────────────────────────────────────────────────
+  // Incremental diff — relay immediately to all other room members.
+  socket.on('tldraw:diff',     (diff)     => { socket.to(ROOM).emit('tldraw:diff', diff); });
+  // Full snapshot — store server-side so late joiners can catch up.
+  socket.on('tldraw:snapshot', (snapshot) => { tldrawSnapshot = snapshot; });
+  // New client requests the current full state.
+  socket.on('tldraw:init-request', () => {
+    if (tldrawSnapshot) socket.emit('tldraw:snapshot', tldrawSnapshot);
+  });
 
   socket.on('disconnect', () => {
     if (myType) socket.to(ROOM).emit('device:status', { type: myType, connected: false });

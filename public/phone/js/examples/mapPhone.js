@@ -143,7 +143,7 @@ window.MapPhone = (function() {
     var container = map.getContainer();
     if (rotation !== 0) {
       container.style.transformOrigin = 'center center';
-      container.style.transform = 'rotate(' + rotation.toFixed(4) + 'rad)';
+      container.style.transform = 'rotate(' + (-rotation).toFixed(4) + 'rad)';
     } else {
       container.style.transform = '';
     }
@@ -170,10 +170,10 @@ window.MapPhone = (function() {
     var dx = touch.clientX - wx;
     var dy = touch.clientY - wy;
 
-    // Un-rotate: apply inverse of CSS rotation
-    // CSS rotate(θ) is clockwise for positive θ; we use the standard 2-D matrix.
-    var ux = Math.cos(rotation) * dx + Math.sin(rotation) * dy;
-    var uy = -Math.sin(rotation) * dx + Math.cos(rotation) * dy;
+    // Un-rotate: apply inverse of CSS rotation.
+    // CSS rotate(-θ) was applied; to invert, rotate by +θ.
+    var ux = Math.cos(rotation) * dx - Math.sin(rotation) * dy;
+    var uy = Math.sin(rotation) * dx + Math.cos(rotation) * dy;
 
     // The Leaflet container is EXPAND× the wrapper.
     // Leaf's containerPointToLatLng expects coords relative to the map container's

@@ -115,11 +115,9 @@ window.MapExample = (function() {
 
     var sw, ne;
     if (lastMarkerInfo && lastMarkerInfo.scale && lastMarkerInfo.drawAreaW) {
-      // Compute the geographic bounds directly from the normalised viewport extents.
-      // wbVpW / WB_W = fraction of camera width covered by the drawing area.
-      var WB_W = 10000, WB_H = 10000;
-      var halfNW = (lastMarkerInfo.wbVpW / WB_W) / 2;
-      var halfNH = (lastMarkerInfo.wbVpH / WB_H) / 2;
+      // Use the actual camera dimensions for a geometrically correct extent.
+      var halfNW = lastMarkerInfo.drawAreaW * lastMarkerInfo.scale / (2 * lastMarkerInfo.camW);
+      var halfNH = lastMarkerInfo.drawAreaH * lastMarkerInfo.scale / (2 * lastMarkerInfo.camH);
       var bounds = map.getBounds();
       var north = bounds.getNorth(), south = bounds.getSouth();
       var west  = bounds.getWest(),  east  = bounds.getEast();

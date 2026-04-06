@@ -21,6 +21,11 @@
     if (activeExample && activeExample.onPhoneTouch) activeExample.onPhoneTouch(data);
   });
 
+  // ── tldraw store sync (from phones or other laptops) ──────────────────────
+  socket.on('tldraw:diff', function(diff) {
+    if (activeExample && activeExample.onTldrawDiff) activeExample.onTldrawDiff(diff);
+  });
+
   // ── Phone viewport dimensions (phone → laptop) ─────────────────────────────
   // Keyed by markerId; defaults used until the phone reports its own dims.
   var phoneViewportData = {};
@@ -85,7 +90,7 @@
     });
     currentExampleName = name;
     activeExample = examples[name] || null;
-    if (activeExample && activeExample.init) activeExample.init(panelEl);
+    if (activeExample && activeExample.init) activeExample.init(panelEl, socket);
     if (activeExample && activeExample.setRotationEnabled) {
       activeExample.setRotationEnabled(useRotation);
     }
@@ -234,6 +239,8 @@
           drawAreaH:     daH,
           markerDisplayPx: mdisp,
           scale:         scale,
+          camW:          W,
+          camH:          H,
           wbX:           wbX,
           wbY:           wbY,
           wbVpW:         wbVpW,
