@@ -175,8 +175,10 @@ window.TldrawExample = (function () {
     if (!_editor) return;
     _editor.store.mergeRemoteChanges(function () {
       var records = [].concat(diff.added || [], diff.updated || []);
-      // Filter out per-device records (camera, instance) — these are local to each
-      // client and must not overwrite the laptop's own camera position.
+      // Filter out per-device records that must not be shared across clients:
+      //   camera   — stores each client's viewport position (x, y, z pan/zoom)
+      //   instance — stores per-client UI state (current tool, selected shapes, etc.)
+      // All other record types (shapes, pages, assets, etc.) are shared normally.
       records = records.filter(function (r) {
         return r && r.typeName !== 'camera' && r.typeName !== 'instance';
       });

@@ -190,6 +190,9 @@ window.TldrawPhone = (function () {
     var zoom = canvasW / vp.wbW;
 
     _editor.store.mergeRemoteChanges(function () {
+      // Negative offsets translate the tldraw world origin to align with the
+      // screen viewport: tldraw renders worldX at screenX = (worldX + camera.x) * z,
+      // so camera.x = -wbLeft places wbLeft at screen x=0.
       _editor.setCamera(
         { x: -vp.wbLeft, y: -vp.wbTop, z: zoom },
         { immediate: true }

@@ -153,7 +153,15 @@ window.MapExample = (function() {
 
   // Compute 4 corners of a rectangle (halfLng × halfLat) centred at `center`,
   // rotated clockwise by `rotation` radians in geographic (east-north) space.
-  // Uses the standard clockwise rotation matrix: (x', y') = (x·cosθ + y·sinθ, −x·sinθ + y·cosθ)
+  //
+  // In geographic coordinates x = east (longitude) and y = north (latitude).
+  // A clockwise rotation by θ (matching the camera's atan2 angle for the phone)
+  // uses the matrix [ cosθ  sinθ ; −sinθ  cosθ ]:
+  //   dlng' =  dx·cosθ + dy·sinθ   (new east offset)
+  //   dlat' = −dx·sinθ + dy·cosθ   (new north offset, sign follows y=north convention)
+  // The negative sign on sinθ for dlat is correct because north=+y in geography
+  // but down=+y in camera/screen space, so the y-axis is already accounted for
+  // in how `rotation` is measured (atan2 of camera coordinates).
   function _rotatedCorners(center, halfLng, halfLat, rotation) {
     var cosR = Math.cos(rotation), sinR = Math.sin(rotation);
     // Local corners: [dlng, dlat] before rotation (NW, NE, SE, SW order → closes polygon)
@@ -166,8 +174,8 @@ window.MapExample = (function() {
     return local.map(function (c) {
       var dx = c[0], dy = c[1];
       return L.latLng(
-        center.lat + (-dx * sinR + dy * cosR),
-        center.lng + ( dx * cosR + dy * sinR)
+        center.lat + (-dx * sinR + dy * cosR),  // dlat' = −dx·sinθ + dy·cosθ
+        center.lng + ( dx * cosR + dy * sinR)   // dlng' =  dx·cosθ + dy·sinθ
       );
     });
   }
