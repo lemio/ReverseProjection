@@ -176,6 +176,8 @@ window.TldrawPhone = (function () {
   /* ── Camera positioning ────────────────────────────────────────────── */
   // Position the tldraw viewport over the AR-detected WB area.
   // No rotation is applied — the canvas always stays upright.
+  // Wrapped in mergeRemoteChanges so the camera update is NOT captured by the
+  // outbound store listener (source='user') and is not sent back to the server.
   function _setCamera(vp) {
     if (!vp || !vp.wbW || !vp.wbH || !_editor) return;
 
@@ -187,10 +189,12 @@ window.TldrawPhone = (function () {
     // To show world point wbLeft at screen x=0: camera.x = -wbLeft
     var zoom = canvasW / vp.wbW;
 
-    _editor.setCamera(
-      { x: -vp.wbLeft, y: -vp.wbTop, z: zoom },
-      { immediate: true }
-    );
+    _editor.store.mergeRemoteChanges(function () {
+      _editor.setCamera(
+        { x: -vp.wbLeft, y: -vp.wbTop, z: zoom },
+        { immediate: true }
+      );
+    });
   }
 
   /* ── Incoming laptop state ─────────────────────────────────────────── */

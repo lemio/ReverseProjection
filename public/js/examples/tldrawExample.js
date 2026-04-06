@@ -175,6 +175,11 @@ window.TldrawExample = (function () {
     if (!_editor) return;
     _editor.store.mergeRemoteChanges(function () {
       var records = [].concat(diff.added || [], diff.updated || []);
+      // Filter out per-device records (camera, instance) — these are local to each
+      // client and must not overwrite the laptop's own camera position.
+      records = records.filter(function (r) {
+        return r && r.typeName !== 'camera' && r.typeName !== 'instance';
+      });
       if (records.length) _editor.store.put(records);
       var removed = diff.removed || [];
       if (removed.length) _editor.store.remove(removed);
@@ -184,7 +189,11 @@ window.TldrawExample = (function () {
   function _onRemoteDiff(diff)     { onTldrawDiff(diff); }
   function _onRemoteSnapshot(snap) {
     if (_editor) {
+      // Preserve the laptop's own camera position — loading a snapshot would
+      // otherwise reset it to whatever camera was in the snapshot (from a phone).
+      var cam = _editor.getCamera();
       _editor.store.loadSnapshot(snap);
+      _editor.setCamera(cam, { immediate: true });
     } else {
       _pendingSnap = snap;
     }

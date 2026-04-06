@@ -107,38 +107,36 @@ window.MapExample = (function() {
     console.log('[MapExample] onDetectionChange → detected=' + isDetected);
   }
 
-  // Calculate and draw the rectangle representing the phone's visible map area.
+  // Calculate and draw the polygon representing the phone's visible map area,
+  // rotated to match the phone's physical tilt angle.
   // Uses actual phone drawing-area size derived from marker scale when available,
   // falling back to a representative 200 × 400 px viewport otherwise.
   function updatePhoneViewRect() {
     var center = cameraToLatLng(phoneNX, phoneNY);
+    var halfLng, halfLat;
 
-    var sw, ne;
     if (lastMarkerInfo && lastMarkerInfo.scale && lastMarkerInfo.drawAreaW) {
       // Use the actual camera dimensions for a geometrically correct extent.
       var halfNW = lastMarkerInfo.drawAreaW * lastMarkerInfo.scale / (2 * lastMarkerInfo.camW);
       var halfNH = lastMarkerInfo.drawAreaH * lastMarkerInfo.scale / (2 * lastMarkerInfo.camH);
       var bounds = map.getBounds();
-      var north = bounds.getNorth(), south = bounds.getSouth();
-      var west  = bounds.getWest(),  east  = bounds.getEast();
-      var latSpan = north - south;
-      var lngSpan = east  - west;
-      sw = L.latLng(center.lat - halfNH * latSpan, center.lng - halfNW * lngSpan);
-      ne = L.latLng(center.lat + halfNH * latSpan, center.lng + halfNW * lngSpan);
+      halfLng = halfNW * (bounds.getEast()  - bounds.getWest());
+      halfLat = halfNH * (bounds.getNorth() - bounds.getSouth());
     } else {
       // Legacy fallback: representative 200 × 400 px at zoom+3
       var phoneZoom = Math.min(18, map.getZoom() + 3);
-      var halfW  = 100; // px
-      var halfH  = 200; // px
-      var centerPx = map.project(center, phoneZoom);
-      sw = map.unproject(L.point(centerPx.x - halfW, centerPx.y + halfH), phoneZoom);
-      ne = map.unproject(L.point(centerPx.x + halfW, centerPx.y - halfH), phoneZoom);
+      var centerPx  = map.project(center, phoneZoom);
+      var sw = map.unproject(L.point(centerPx.x - 100, centerPx.y + 200), phoneZoom);
+      var ne = map.unproject(L.point(centerPx.x + 100, centerPx.y - 200), phoneZoom);
+      halfLng = (ne.lng - sw.lng) / 2;
+      halfLat = (ne.lat - sw.lat) / 2;
     }
 
-    var rectBounds = L.latLngBounds(sw, ne);
+    var rotation = rotationEnabled ? phoneRotation : 0;
+    var corners  = _rotatedCorners(center, halfLng, halfLat, rotation);
 
     if (!phoneViewRect) {
-      phoneViewRect = L.rectangle(rectBounds, {
+      phoneViewRect = L.polygon(corners, {
         color: '#4d7cfe',
         weight: 2,
         fill: true,
@@ -149,8 +147,29 @@ window.MapExample = (function() {
       }).addTo(map);
       phoneViewRect.bindTooltip('Phone viewport', { permanent: false, direction: 'top' });
     } else {
-      phoneViewRect.setBounds(rectBounds);
+      phoneViewRect.setLatLngs(corners);
     }
+  }
+
+  // Compute 4 corners of a rectangle (halfLng × halfLat) centred at `center`,
+  // rotated clockwise by `rotation` radians in geographic (east-north) space.
+  // Uses the standard clockwise rotation matrix: (x', y') = (x·cosθ + y·sinθ, −x·sinθ + y·cosθ)
+  function _rotatedCorners(center, halfLng, halfLat, rotation) {
+    var cosR = Math.cos(rotation), sinR = Math.sin(rotation);
+    // Local corners: [dlng, dlat] before rotation (NW, NE, SE, SW order → closes polygon)
+    var local = [
+      [-halfLng,  halfLat],
+      [ halfLng,  halfLat],
+      [ halfLng, -halfLat],
+      [-halfLng, -halfLat]
+    ];
+    return local.map(function (c) {
+      var dx = c[0], dy = c[1];
+      return L.latLng(
+        center.lat + (-dx * sinR + dy * cosR),
+        center.lng + ( dx * cosR + dy * sinR)
+      );
+    });
   }
 
   function onPhoneTouch(data) {

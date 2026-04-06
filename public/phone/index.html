@@ -42,10 +42,10 @@
   <script src="/phone/js/drawMarker.js"></script>
   <script src="/phone/js/examples/mapPhone.js"></script>
   <script src="/phone/js/examples/tldrawPhone.js"></script>
-  <script src="/phone/js/phoneApp.js"></script>
   <script>
-    // Generate or retrieve a stable client ID (persists across refreshes so the
-    // server gives this device the same marker ID every time).
+    // Generate or retrieve a stable client ID BEFORE phoneApp.js runs.
+    // This must come before phoneApp.js is loaded so that window.RP_CLIENT_ID
+    // is available when phoneApp.js executes its IIFE.
     (function() {
       var stored = localStorage.getItem('rpClientId');
       if (!stored) {
@@ -58,7 +58,9 @@
       }
       window.RP_CLIENT_ID = stored;
     })();
-
+  </script>
+  <script src="/phone/js/phoneApp.js"></script>
+  <script>
     // Draw initial marker (ID 0) — phoneApp.js will redraw with the server-assigned ID
     (function() {
       var s = document.getElementById('marker-single');
