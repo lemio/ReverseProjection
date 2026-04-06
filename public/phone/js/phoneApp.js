@@ -1,9 +1,12 @@
 (function() {
-  // ── Marker ID — read from ?id= URL param (default 0) ─────────────────────
-  var PHONE_MARKER_ID = (function() {
-    var p = new URLSearchParams(window.location.search);
-    return parseInt(p.get('id') || '0', 10);
-  })();
+  // ── Stable client ID (from localStorage) ─────────────────────────────────
+  // This is generated once per device so the server can assign the same marker
+  // ID across page refreshes, which prevents phantom markers from accumulating.
+  var CLIENT_ID = window.RP_CLIENT_ID || 'unknown';
+
+  // Marker ID is assigned by the server after registration.
+  // Default 0 is only used until the server responds.
+  var PHONE_MARKER_ID = 0;
 
   var socket = null;
   var currentExample = 'map';
@@ -19,10 +22,10 @@
   // Emit viewport dimensions so the laptop can compute the correct scale.
   function emitViewport() {
     if (!socket) return;
-    var s      = document.getElementById('marker-single');
+    var s       = document.getElementById('marker-single');
     var content = document.getElementById('example-content');
     socket.emit('phone:viewport', {
-      markerId:       PHONE_MARKER_ID,
+      markerId:        PHONE_MARKER_ID,
       markerDisplayPx: s ? (s.offsetWidth || 280) : 280,
       drawAreaW:       content ? (content.offsetWidth  || 375) : 375,
       drawAreaH:       content ? (content.offsetHeight || 500) : 500
@@ -33,18 +36,31 @@
     socket = io();
 
     socket.on('connect', function() {
-      socket.emit('device:register', { type: 'phone', markerId: PHONE_MARKER_ID });
       stateCount = 0;
+      // Send clientId so the server can give us a stable markerId
+      socket.emit('device:register', { type: 'phone', clientId: CLIENT_ID });
+    });
+
+    // Server ack — contains the assigned markerId
+    socket.on('device:registered', function(data) {
+      PHONE_MARKER_ID = (data && data.markerId != null) ? data.markerId : 0;
+      console.log('[PhoneApp] Registered | clientId=' + CLIENT_ID + ' | markerId=' + PHONE_MARKER_ID);
+
       document.getElementById('connecting-screen').style.display = 'none';
       document.getElementById('example-area').style.display = 'flex';
       var indicator = document.getElementById('connection-indicator');
       indicator.className = 'connected';
       indicator.textContent = 'Live';
-      console.log('[PhoneApp] Connected | markerId=' + PHONE_MARKER_ID);
+
+      // Redraw marker with the correct ID
+      redrawMarker();
+
+      // Switch / re-init example with the correct marker ID
       switchExample(currentExample);
-      // Small delay so the layout is ready before measuring
+
       setTimeout(emitViewport, 200);
-      // Request any existing tldraw state from the server
+
+      // Request any existing tldraw state
       socket.emit('tldraw:init-request');
     });
 
@@ -63,34 +79,24 @@
       if (stateCount % 30 === 1) {
         console.log('[PhoneApp] laptop:state #' + stateCount +
           ' | detected=' + (state && state.detected) +
-          ' | type=' + (state && state.type) +
-          ' | hasExample=' + (activePhoneExample !== null));
+          ' | type=' + (state && state.type));
       }
 
       if (activePhoneExample && activePhoneExample.onState) {
         activePhoneExample.onState(state);
       }
 
-      // Toggle searching class to grow the marker when the laptop can't see us
+      // Toggle searching class for spinner visibility — no marker resize
       var phoneApp = document.getElementById('phone-app');
       var wasSearching = phoneApp.classList.contains('searching');
       var nowSearching = state && state.detected === false;
       if (nowSearching !== wasSearching) {
         phoneApp.classList.toggle('searching', nowSearching);
         console.log('[PhoneApp] searching ' + (nowSearching ? 'ON' : 'OFF'));
-        // Redraw marker after CSS transition finishes (size changed) then re-emit
-        setTimeout(function() {
-          redrawMarker();
-          emitViewport();
-        }, 450);
-        if (activePhoneExample && activePhoneExample.invalidate) {
-          setTimeout(function() { activePhoneExample.invalidate(); }, 450);
-        }
       }
     });
 
-    // ── tldraw store sync ────────────────────────────────────────────────
-    // Forward incoming diffs / snapshots to the active example.
+    // ── tldraw store sync ──────────────────────────────────────────────────
     socket.on('tldraw:diff', function(diff) {
       if (activePhoneExample && activePhoneExample.onTldrawDiff) {
         activePhoneExample.onTldrawDiff(diff);
@@ -107,6 +113,11 @@
     currentExample = name;
     var displayNames = { map: 'Map', tldraw: 'Draw' };
     document.getElementById('example-name').textContent = displayNames[name] || name;
+
+    // tldraw-mode class adds extra top margin so the tldraw toolbar is accessible
+    var phoneApp = document.getElementById('phone-app');
+    phoneApp.classList.toggle('tldraw-mode', name === 'tldraw');
+
     if (activePhoneExample && activePhoneExample.destroy) activePhoneExample.destroy();
     activePhoneExample = examples[name] || null;
     var contentEl = document.getElementById('example-content');
@@ -115,8 +126,6 @@
         contentEl,
         function(data) {
           if (!socket) return;
-          // tldrawPhone sends typed envelopes for the tldraw sync channel;
-          // everything else (map lat/lng touches) goes via phone:touch.
           if (data && data.type === 'tldraw:diff') {
             socket.emit('tldraw:diff', data.diff);
           } else if (data && data.type === 'tldraw:snapshot') {
@@ -128,7 +137,6 @@
         PHONE_MARKER_ID
       );
     }
-    // Re-send viewport after switching (layout may have changed)
     setTimeout(emitViewport, 300);
   }
 

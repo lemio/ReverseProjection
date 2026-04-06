@@ -5,6 +5,9 @@
  * Incremental store diffs are synced via socket.io 'tldraw:diff' events.
  * Phone viewport positions (from AR detection) are shown as a canvas overlay
  * drawn on top of the tldraw canvas.
+ *
+ * The laptop user can zoom/pan the tldraw canvas freely — we never forcibly
+ * re-centre the camera.  We only update the overlay rectangles.
  */
 window.TldrawExample = (function () {
   'use strict';
@@ -34,10 +37,9 @@ window.TldrawExample = (function () {
   var _animFrame     = null;
   var _resizeHandler = null;
 
-  // Phone viewport data (from AR detection)
+  // Phone viewport data (from AR detection) — rotation is not used for tldraw
   var _phoneViewports = {};
   var _phoneDetected  = {};
-  var _rotationEnabled = false;
 
   /* ── CSS injection ─────────────────────────────────────────────────── */
   function _injectCss() {
@@ -215,13 +217,6 @@ window.TldrawExample = (function () {
       var sy = (vp.wbTop  + cam.y) * cam.z;
       var sw = vp.wbW * cam.z;
       var sh = vp.wbH * cam.z;
-      var cx = sx + sw / 2;
-      var cy = sy + sh / 2;
-
-      _overlayCtx.save();
-      _overlayCtx.translate(cx, cy);
-      _overlayCtx.rotate(vp.rotation || 0);
-      _overlayCtx.translate(-cx, -cy);
 
       _overlayCtx.globalAlpha = detected ? 1 : 0.3;
       _overlayCtx.strokeStyle = color;
@@ -236,14 +231,16 @@ window.TldrawExample = (function () {
       _overlayCtx.fillStyle = color;
       _overlayCtx.fillText(vp.label || ('Phone ' + vp.id), sx + 4, sy - 4);
 
-      _overlayCtx.restore();
+      _overlayCtx.globalAlpha = 1;
     });
   }
 
   /* ── Example API (called by app.js) ────────────────────────────────── */
-  function setRotationEnabled(enabled) {
-    _rotationEnabled = !!enabled;
-  }
+
+  // Rotation is not forwarded to tldraw — it does not make sense to rotate
+  // the whiteboard based on phone tilt.  The method is kept so app.js can
+  // call it without errors when the toggle is clicked.
+  function setRotationEnabled() { /* no-op for tldraw */ }
 
   function onAllMarkersPosition(markerInfos) {
     Object.values(markerInfos).forEach(function (info) {
@@ -254,7 +251,6 @@ window.TldrawExample = (function () {
         wbTop:     info.wbY - info.wbVpH / 2,
         wbW:       info.wbVpW,
         wbH:       info.wbVpH,
-        rotation:  _rotationEnabled ? info.rotation : 0,
         color:     PHONE_COLORS[info.id % PHONE_COLORS.length],
         label:     'Phone ' + info.id,
         drawAreaW: info.drawAreaW,
@@ -271,6 +267,7 @@ window.TldrawExample = (function () {
 
   // getState is called each detection frame by app.js; result → laptop:state → phones.
   // Phones use phones[myId] to position their tldraw camera over the correct WB area.
+  // Rotation is NOT included — tldraw on the phone always shows the canvas upright.
   function getState() {
     var phonesState = {};
     Object.keys(_phoneViewports).forEach(function (id) {
@@ -280,7 +277,6 @@ window.TldrawExample = (function () {
         wbTop:     vp.wbTop,
         wbW:       vp.wbW,
         wbH:       vp.wbH,
-        rotation:  vp.rotation,
         color:     vp.color,
         drawAreaW: vp.drawAreaW,
         drawAreaH: vp.drawAreaH

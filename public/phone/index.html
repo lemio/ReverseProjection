@@ -13,8 +13,11 @@
 </head>
 <body>
   <div id="phone-app">
-    <!-- AR marker — ID comes from ?id= URL parameter (default 0) -->
+    <!-- AR marker — fixed size, always visible at the top -->
     <canvas id="marker-single" data-marker-id="0"></canvas>
+
+    <!-- Spinner shown in top-right when the laptop can't see the marker -->
+    <div id="detect-spinner"></div>
 
     <!-- Connecting overlay — shown briefly while the socket handshakes -->
     <div id="connecting-screen">
@@ -41,14 +44,26 @@
   <script src="/phone/js/examples/tldrawPhone.js"></script>
   <script src="/phone/js/phoneApp.js"></script>
   <script>
-    // Read marker ID from ?id=N URL parameter (default 0)
+    // Generate or retrieve a stable client ID (persists across refreshes so the
+    // server gives this device the same marker ID every time).
     (function() {
-      var params   = new URLSearchParams(window.location.search);
-      var markerId = parseInt(params.get('id') || '0', 10);
-      var s = document.getElementById('marker-single');
-      s.dataset.markerId = markerId;
-      drawJSARMarker(s, markerId, s.offsetWidth || 280);
+      var stored = localStorage.getItem('rpClientId');
+      if (!stored) {
+        stored = 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          var r = Math.random() * 16 | 0;
+          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+        localStorage.setItem('rpClientId', stored);
+      }
+      window.RP_CLIENT_ID = stored;
     })();
+
+    // Draw initial marker (ID 0) — phoneApp.js will redraw with the server-assigned ID
+    (function() {
+      var s = document.getElementById('marker-single');
+      drawJSARMarker(s, 0, s.offsetWidth || 280);
+    })();
+
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/phone/sw.js').catch(console.error);
     }

@@ -9,8 +9,7 @@
  * bounds (wbLeft, wbTop, wbW, wbH) via laptop:state, and this module sets
  * the tldraw camera to match, acting as a window into the shared whiteboard.
  *
- * Counter-rotation is applied as a CSS transform on the tldraw root element
- * to compensate for the phone's physical tilt angle.
+ * No CSS rotation is applied — the tldraw canvas always remains upright.
  *
  * Store changes are synced to/from the server via 'tldraw:diff' socket events.
  * phoneApp.js manages the socket relay; this module exposes onTldrawDiff /
@@ -109,6 +108,13 @@ window.TldrawPhone = (function () {
       _accumulateDiff(change.changes);
     });
 
+    // Send our current state to any device that already asked for it
+    // (covers the case where the editor was slow to load but init-request arrived
+    //  before _onMount fired; in that case we push a snapshot now)
+    if (_sendFn) {
+      _sendFn({ type: 'tldraw:snapshot', snapshot: editor.store.getSnapshot() });
+    }
+
     console.log('[TldrawPhone] tldraw ready, markerId=' + _markerId);
   }
 
@@ -136,7 +142,6 @@ window.TldrawPhone = (function () {
       removed: Object.keys(_pendingDiff.removed)
     };
     _pendingDiff = null;
-    // phoneApp.js routes { type:'tldraw:diff', diff:... } to socket.emit('tldraw:diff', diff)
     _sendFn({ type: 'tldraw:diff', diff: diff });
     // Send a full snapshot for late joiners (throttled to every 3 s)
     if (_snapshotTimer) clearTimeout(_snapshotTimer);
@@ -168,33 +173,24 @@ window.TldrawPhone = (function () {
     }
   }
 
-  /* ── Camera & rotation ─────────────────────────────────────────────── */
-  // Position the tldraw viewport over the AR-detected WB area and
-  // counter-rotate the container to compensate for phone tilt.
+  /* ── Camera positioning ────────────────────────────────────────────── */
+  // Position the tldraw viewport over the AR-detected WB area.
+  // No rotation is applied — the canvas always stays upright.
   function _setCamera(vp) {
-    if (!vp || !vp.wbW || !vp.wbH) return;
+    if (!vp || !vp.wbW || !vp.wbH || !_editor) return;
 
     var rootEl  = document.getElementById('tdlp-root');
     var canvasW = rootEl ? (rootEl.clientWidth  || 375) : 375;
 
     // Zoom so the viewport width exactly fills the canvas width.
-    // tldraw transform: screenX = (worldX + camera.x) * camera.z
+    // tldraw camera: screenX = (worldX + camera.x) * camera.z
     // To show world point wbLeft at screen x=0: camera.x = -wbLeft
     var zoom = canvasW / vp.wbW;
 
-    if (_editor) {
-      _editor.setCamera(
-        { x: -vp.wbLeft, y: -vp.wbTop, z: zoom },
-        { immediate: true }
-      );
-    }
-
-    // Counter-rotate the tldraw root div so content stays world-aligned
-    if (rootEl) {
-      var r = vp.rotation || 0;
-      rootEl.style.transform       = r !== 0 ? 'rotate(' + (-r).toFixed(4) + 'rad)' : '';
-      rootEl.style.transformOrigin = 'center center';
-    }
+    _editor.setCamera(
+      { x: -vp.wbLeft, y: -vp.wbTop, z: zoom },
+      { immediate: true }
+    );
   }
 
   /* ── Incoming laptop state ─────────────────────────────────────────── */

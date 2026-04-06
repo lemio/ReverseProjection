@@ -21,7 +21,7 @@ html, body {
   overflow: hidden;
 }
 
-/* ── Single centred marker — always visible at the top ── */
+/* ── Single centred marker — fixed size, always visible at the top ── */
 #marker-single {
   position: absolute;
   top: 0;
@@ -32,13 +32,25 @@ html, body {
   z-index: 100;
   pointer-events: none;
   image-rendering: pixelated;
-  transition: width 0.4s ease, height 0.4s ease;
 }
 
-/* Grow marker when laptop can't find the phone — aids re-detection */
-#phone-app.searching #marker-single {
-  width: min(90vw, 360px);
-  height: min(90vw, 360px);
+/* ── Detection spinner — shown in top-right when laptop can't see us ── */
+#detect-spinner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,0.15);
+  border-top-color: #4d7cfe;
+  border-radius: 50%;
+  z-index: 200;
+  display: none;
+  pointer-events: none;
+}
+#phone-app.searching #detect-spinner {
+  display: block;
+  animation: spin 0.8s linear infinite;
 }
 
 /* ── Connecting screen ── */
@@ -94,10 +106,7 @@ html, body {
   flex-direction: column;
 }
 
-/* Content sits below the single marker.
-   Margin is fixed — the marker grows visually (overlapping the map) when
-   searching, but the map container height never changes so Leaflet's
-   internal pixel↔coordinate mapping stays valid at all times. */
+/* Content sits below the single marker. */
 #example-content {
   flex: 1;
   min-height: 0;
@@ -108,6 +117,12 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* In tldraw mode push the content down an extra 44px so the tldraw top toolbar
+   is not hidden behind the AR marker. */
+#phone-app.tldraw-mode #example-content {
+  margin-top: calc(min(75vw, 280px) + 52px);
 }
 
 /* ── Status bar ── */
