@@ -14,6 +14,13 @@
         <div id="tool-group">
           <button class="tool-btn active" data-example="map">Map</button>
           <button class="tool-btn" data-example="tldraw">Draw</button>
+          <button class="tool-btn" data-example="screen">Screen</button>
+          <div class="toolbar-sep"></div>
+          <div id="phone-size-wrap">
+            <label for="phone-size-slider">Phone size</label>
+            <input id="phone-size-slider" type="range" min="75" max="140" step="5" value="100">
+            <span id="phone-size-value">100%</span>
+          </div>
           <div class="toolbar-sep"></div>
           <button class="tool-btn" id="invert-btn">Invert</button>
           <button class="tool-btn" id="rotate-btn">No Rotation</button>
@@ -67,6 +74,7 @@
   <script src="/js/homography.js"></script>
   <script src="/js/examples/mapExample.js"></script>
   <script src="/js/examples/tldrawExample.js"></script>
+  <script src="/js/examples/screenExample.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

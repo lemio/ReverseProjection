@@ -19,6 +19,61 @@ Anyone who opens the phone page connects automatically.
 
 ---
 
+## Mapping Model
+
+The project uses three different coordinate spaces. Keeping them separate is the key to making the overlays line up.
+
+1. Camera space
+   The laptop webcam sees the physical phone. Marker detection gives a phone centre `(nx, ny)` in normalised camera coordinates and a phone rotation `θ`.
+
+2. Phone viewport space
+   The phone reports the size of the actually visible interactive area, not the whole page. This is the rectangle below the marker and above the bottom status bar. That reported width and height are the only dimensions that may be used to infer the visible viewport.
+
+3. Content space
+   Each example maps the visible phone viewport into its own content space.
+   - Map mode: geographic map bounds.
+   - Screen mode: source video pixels from the captured desktop stream.
+   - Whiteboard mode: whiteboard world coordinates.
+
+The important rule is:
+
+- The blue overlay on the laptop must represent the phone's visible content viewport in content space.
+- It must not represent the physical phone body in camera space.
+
+### Screen mode mapping
+
+Screen mode uses the exact same viewport transform on both devices.
+
+1. The phone renders the incoming desktop stream into its visible area using a cover transform:
+   - base scale = `max(phoneW / sourceW, phoneH / sourceH)`
+   - total scale = `base scale * zoom`
+2. The phone then translates the scaled source so that the tracked point `(nx, ny)` becomes the centre of the visible phone viewport.
+3. That translation is clamped so the source never exposes empty edges.
+4. The laptop overlay must compute the inverse of that same transform and draw the resulting source rectangle on top of the displayed preview.
+5. If rotation is enabled, the same viewport rectangle is rotated by the tracked phone angle. If rotation is disabled, both the phone and the overlay stay axis-aligned.
+
+This means the laptop overlay for Screen mode must be derived from:
+- source video size
+- reported visible phone viewport size
+- zoom
+- tracked `(nx, ny)`
+- tracked rotation when enabled
+
+It must not be derived from the marker's apparent size in the webcam image.
+
+### Map mode mapping
+
+Map mode uses the reported visible phone viewport size to convert the tracked phone centre into a geographic rectangle.
+
+1. The laptop maps `(nx, ny)` into the current map bounds.
+2. The reported phone viewport width and height are converted to fractions of the camera frame using the detected physical scale.
+3. Those fractions are then converted into fractions of the current Leaflet map bounds.
+4. If rotation is enabled, the rectangle is rotated. Otherwise it stays upright.
+
+The same visible viewport dimensions must be used consistently on the phone, in the laptop state, and in the laptop overlay.
+
+---
+
 ## Getting Started
 
 ### Step 1 — Install Node.js

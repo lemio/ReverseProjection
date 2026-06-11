@@ -95,6 +95,24 @@ window.MapPhone = (function() {
     if (map) map.invalidateSize();
   }
 
+  function getVisibleSize(el) {
+    if (!el) return { width: 0, height: 0 };
+    var rect = el.getBoundingClientRect();
+    var visibleBottom = rect.bottom;
+    var statusBar = document.getElementById('status-bar');
+    if (statusBar) {
+      visibleBottom = Math.min(visibleBottom, statusBar.getBoundingClientRect().top);
+    }
+    return {
+      width: rect.width,
+      height: Math.max(1, visibleBottom - rect.top)
+    };
+  }
+
+  function getViewportMetrics() {
+    return getVisibleSize(document.getElementById('phone-map-wrap'));
+  }
+
   function onState(state) {
     lastState = state;
     stateLogCount++;
@@ -270,5 +288,5 @@ window.MapPhone = (function() {
     mouseDown    = false;
   }
 
-  return { init, onState, invalidate, destroy };
+  return { init, onState, invalidate, destroy, getViewportMetrics };
 })();

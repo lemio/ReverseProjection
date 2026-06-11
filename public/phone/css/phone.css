@@ -13,6 +13,11 @@ html, body {
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
+:root {
+  --phone-scale: 1;
+  --phone-marker-size: calc(min(75vw, 280px) * var(--phone-scale));
+}
+
 /* ── Root container ── */
 #phone-app {
   position: relative;
@@ -27,8 +32,8 @@ html, body {
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: min(75vw, 280px);
-  height: min(75vw, 280px);
+  width: var(--phone-marker-size);
+  height: var(--phone-marker-size);
   z-index: 100;
   pointer-events: none;
   image-rendering: pixelated;
@@ -110,7 +115,7 @@ html, body {
 #example-content {
   flex: 1;
   min-height: 0;
-  margin-top: calc(min(75vw, 280px) + 8px);
+  margin-top: calc(var(--phone-marker-size) + 8px);
   margin-left: 0;
   margin-right: 0;
   margin-bottom: 0;
