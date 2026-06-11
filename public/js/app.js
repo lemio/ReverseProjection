@@ -3,6 +3,9 @@
   const socket = io();
   socket.emit('device:register', { type: 'laptop' });
 
+  // ── Connected phones registry (socketId → {socketId, markerId}) ──────────
+  var connectedPhones = {};
+
   socket.on('device:status', function(data) {
     if (data.type === 'phone') {
       var dot   = document.querySelector('#phone-status .status-dot');
@@ -10,10 +13,17 @@
       if (data.connected) {
         dot.className = 'status-dot connected';
         label.lastChild.textContent = 'Phone Connected';
+        if (data.socketId) connectedPhones[data.socketId] = data;
+        emitSharedConfig();
       } else {
         dot.className = 'status-dot';
         label.lastChild.textContent = 'Phone';
+        if (data.socketId) delete connectedPhones[data.socketId];
       }
+    }
+
+    if (activeExample && activeExample.onDeviceStatus) {
+      activeExample.onDeviceStatus(data);
     }
   });
 
@@ -24,6 +34,15 @@
   // ── tldraw store sync (from phones or other laptops) ──────────────────────
   socket.on('tldraw:diff', function(diff) {
     if (activeExample && activeExample.onTldrawDiff) activeExample.onTldrawDiff(diff);
+  });
+
+  // ── WebRTC signaling for screen streaming ───────────────────────────────
+  socket.on('webrtc:ready', function(data) {
+    if (activeExample && activeExample.onWebrtcReady) activeExample.onWebrtcReady(data);
+  });
+
+  socket.on('webrtc:signal', function(data) {
+    if (activeExample && activeExample.onWebrtcSignal) activeExample.onWebrtcSignal(data);
   });
 
   // ── Phone viewport dimensions (phone → laptop) ─────────────────────────────
@@ -80,7 +99,48 @@
   // ── Example switching ─────────────────────────────────────────────────────
   var activeExample       = null;
   var currentExampleName  = 'map';
-  var examples = { map: window.MapExample, tldraw: window.TldrawExample };
+  var phoneScalePercent = parseInt(localStorage.getItem('rpPhoneSizePercent') || '100', 10);
+  if (!isFinite(phoneScalePercent)) phoneScalePercent = 100;
+  phoneScalePercent = Math.max(75, Math.min(140, phoneScalePercent));
+
+  var phoneSizeSlider = document.getElementById('phone-size-slider');
+  var phoneSizeValue  = document.getElementById('phone-size-value');
+
+  function getPhoneScale() {
+    return phoneScalePercent / 100;
+  }
+
+  function emitSharedConfig(options) {
+    options = options || {};
+    socket.emit('config:change', {
+      example: currentExampleName,
+      phoneScale: getPhoneScale(),
+      reannounce: !!options.reannounce
+    });
+  }
+
+  function updatePhoneSizeUi() {
+    if (phoneSizeSlider) phoneSizeSlider.value = String(phoneScalePercent);
+    if (phoneSizeValue) phoneSizeValue.textContent = phoneScalePercent + '%';
+  }
+
+  updatePhoneSizeUi();
+
+  if (phoneSizeSlider) {
+    phoneSizeSlider.addEventListener('input', function() {
+      phoneScalePercent = parseInt(phoneSizeSlider.value, 10) || 100;
+      phoneScalePercent = Math.max(75, Math.min(140, phoneScalePercent));
+      localStorage.setItem('rpPhoneSizePercent', String(phoneScalePercent));
+      updatePhoneSizeUi();
+      emitSharedConfig({ reannounce: false });
+    });
+  }
+
+  var examples = {
+    map: window.MapExample,
+    tldraw: window.TldrawExample,
+    screen: window.ScreenExample
+  };
   var panelEl  = document.getElementById('example-panel');
 
   function switchExample(name) {
@@ -90,11 +150,11 @@
     });
     currentExampleName = name;
     activeExample = examples[name] || null;
-    if (activeExample && activeExample.init) activeExample.init(panelEl, socket);
+    if (activeExample && activeExample.init) activeExample.init(panelEl, socket, connectedPhones);
     if (activeExample && activeExample.setRotationEnabled) {
       activeExample.setRotationEnabled(useRotation);
     }
-    socket.emit('config:change', { example: name });
+    emitSharedConfig({ reannounce: name === 'screen' });
   }
 
   document.querySelectorAll('.tool-btn[data-example]').forEach(function(btn) {

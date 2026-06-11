@@ -70,6 +70,32 @@ header {
   gap: 2px;
 }
 
+#phone-size-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  min-width: 220px;
+}
+
+#phone-size-wrap label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+#phone-size-slider {
+  width: 110px;
+  accent-color: var(--accent);
+}
+
+#phone-size-value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+  text-align: right;
+}
+
 .toolbar-sep {
   width: 1px;
   height: 18px;
@@ -216,6 +242,69 @@ main {
   flex: 1;
   height: 100%;
   border-left: 1px solid rgba(77,124,254,0.3);
+}
+
+#screen-capture-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  border-left: 1px solid rgba(77,124,254,0.3);
+}
+
+#screen-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+#screen-preview {
+  position: absolute;
+  display: block;
+  object-fit: fill;
+}
+
+#screen-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#screen-controls {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 20;
+}
+
+#screen-controls button {
+  background: rgba(0, 0, 0, 0.65);
+  color: #e2e2e2;
+  border-color: rgba(255,255,255,0.2);
+  font-size: 0.75rem;
+  height: 26px;
+}
+#screen-controls button:hover {
+  background: rgba(40,40,40,0.85);
+  color: #fff;
+}
+
+#screen-status {
+  background: rgba(0, 0, 0, 0.65);
+  color: #d1d5db;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  margin-left: auto;
 }
 
 /* Map overlay corner label */
