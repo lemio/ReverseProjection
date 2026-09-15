@@ -74,12 +74,20 @@ window.JSARDetector = (function () {
   function extractCorners(target) {
     var dir = target.dir;
     var v   = target.vertex;
+    console.log('[JSARDetector] extractCorners: dir=' + dir + ' | raw=' + JSON.stringify(v) + ' | corners=' + JSON.stringify({
+      topLeft:     { x: v[(4 - dir) % 4][0], y: v[(4 - dir) % 4][1] },
+      topRight:    { x: v[(5 - dir) % 4][0], y: v[(5 - dir) % 4][1] },
+      bottomRight: { x: v[(6 - dir) % 4][0], y: v[(6 - dir) % 4][1] },
+      bottomLeft:  { x: v[(7 - dir) % 4][0], y: v[(7 - dir) % 4][1] }
+    }));
+    
     return {
       topLeft:     { x: v[(4 - dir) % 4][0], y: v[(4 - dir) % 4][1] },
       topRight:    { x: v[(5 - dir) % 4][0], y: v[(5 - dir) % 4][1] },
       bottomRight: { x: v[(6 - dir) % 4][0], y: v[(6 - dir) % 4][1] },
       bottomLeft:  { x: v[(7 - dir) % 4][0], y: v[(7 - dir) % 4][1] }
     };
+    
   }
 
   /* ── Detect ALL visible markers → {id: corners, …} or null ─────────── */

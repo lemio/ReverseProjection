@@ -132,7 +132,11 @@ window.MapPhone = (function() {
     if (state.type !== 'map') return;
 
     if (state.detected && state.phoneLat != null && state.phoneLng != null) {
-      var newZoom = Math.min(18, (state.mapZoom || 13) + 3);
+      // Use the zoom computed by the laptop (accounts for the content-zoom slider);
+      // fall back to mapZoom+3 for backwards compatibility.
+      var newZoom = state.phoneZoom != null
+        ? Math.min(18, Math.max(1, Math.round(state.phoneZoom)))
+        : Math.min(18, (state.mapZoom || 13) + 3);
 
       if (stateLogCount % 30 === 1) {
         console.log('[MapPhone] Moving map to [' + state.phoneLat.toFixed(5) + ', ' +

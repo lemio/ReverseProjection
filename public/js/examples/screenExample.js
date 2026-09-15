@@ -130,7 +130,7 @@ window.ScreenExample = (function() {
     var phoneH = Math.max(1, info.drawAreaH || 578);
     var videoW = Math.max(1, metrics.videoW || 1);
     var videoH = Math.max(1, metrics.videoH || 1);
-    var zoom = previewZoom;
+    var zoom = previewZoom / (info.contentZoom || 1);
 
     var nx = Math.max(0, Math.min(1, info.nx != null ? info.nx : 0.5));
     var ny = Math.max(0, Math.min(1, info.ny != null ? info.ny : 0.5));
@@ -369,10 +369,12 @@ window.ScreenExample = (function() {
     ids.forEach(function(idStr) {
       var info = latestMarkerInfos[idStr];
       if (!info) return;
+      // contentZoom > 1 → phone sees MORE of the source → divide the base zoom.
+      var effectiveZoom = previewZoom / (info.contentZoom || 1);
       phones[idStr] = {
-        nx: Math.max(0, Math.min(1, info.nx || 0.5)),
-        ny: Math.max(0, Math.min(1, info.ny || 0.5)),
-        zoom: previewZoom,
+        nx: Math.max(0, Math.min(1, info.nx != null ? info.nx : 0.5)),
+        ny: Math.max(0, Math.min(1, info.ny != null ? info.ny : 0.5)),
+        zoom: effectiveZoom,
         rotation: rotationEnabled ? (info.rotation || 0) : 0
       };
     });

@@ -19,16 +19,22 @@
   var stateCount = 0;
   var phoneScale = 1;
 
+  var emitViewportTimer = null;
+  function scheduleEmitViewport(delay) {
+    clearTimeout(emitViewportTimer);
+    emitViewportTimer = setTimeout(emitViewport, delay || 150);
+  }
+
   function applyPhoneScale(scale, persist) {
     var n = parseFloat(scale);
     if (!isFinite(n)) return;
     n = Math.max(0.75, Math.min(1.4, n));
     phoneScale = n;
-    document.documentElement.style.setProperty('--phone-scale', n.toFixed(2));
+    // The slider now controls content zoom (how much the phone shows), not the
+    // fiducial marker CSS size.  --phone-scale stays at 1 so the marker is stable.
     if (persist) {
       localStorage.setItem('rpPhoneScale', n.toFixed(2));
     }
-    setTimeout(emitViewport, 120);
   }
 
   function redrawMarker() {
@@ -85,7 +91,7 @@
       // Switch / re-init example with the correct marker ID
       switchExample(currentExample);
 
-      setTimeout(emitViewport, 200);
+      scheduleEmitViewport(200);
 
       // Request any existing tldraw state
       socket.emit('tldraw:init-request');
@@ -200,11 +206,11 @@
         PHONE_MARKER_ID
       );
     }
-    setTimeout(emitViewport, 300);
+    scheduleEmitViewport(300);
   }
 
   // Re-emit viewport on orientation / resize changes
-  window.addEventListener('resize', function() { setTimeout(emitViewport, 200); });
+  window.addEventListener('resize', function() { scheduleEmitViewport(200); });
 
   applyPhoneScale(parseFloat(localStorage.getItem('rpPhoneScale') || '1'), false);
 

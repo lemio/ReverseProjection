@@ -126,13 +126,20 @@
 
   updatePhoneSizeUi();
 
+  // Debounce the config emission so rapid slider drags don't flood the phone
+  // with scale changes (each triggers a phone:viewport re-emit that disturbs
+  // the position calculations while the user is still dragging).
+  var sliderEmitTimer = null;
   if (phoneSizeSlider) {
     phoneSizeSlider.addEventListener('input', function() {
       phoneScalePercent = parseInt(phoneSizeSlider.value, 10) || 100;
       phoneScalePercent = Math.max(75, Math.min(140, phoneScalePercent));
       localStorage.setItem('rpPhoneSizePercent', String(phoneScalePercent));
       updatePhoneSizeUi();
-      emitSharedConfig({ reannounce: false });
+      clearTimeout(sliderEmitTimer);
+      sliderEmitTimer = setTimeout(function() {
+        emitSharedConfig({ reannounce: false });
+      }, 80);
     });
   }
 
@@ -200,8 +207,6 @@
   }).then(function(stream) {
     webcamVideo.srcObject = stream;
     webcamVideo.onloadedmetadata = function() {
-      overlayCanvas.width  = webcamVideo.videoWidth;
-      overlayCanvas.height = webcamVideo.videoHeight;
       setDetectionStatus('Searching', 'searching');
       JSARDetector.init();
       detectLoop();
@@ -276,27 +281,41 @@
         var mdisp     = vp.markerDisplayPx || 280;
         var daH       = vp.drawAreaH       || 500;
         var daW       = vp.drawAreaW       || 375;
-        var offsetPhonePx = mdisp / 2 + 8 + daH / 2;
-        var offCamX   = -Math.sin(rotation) * offsetPhonePx * scale;
-        var offCamY   =  Math.cos(rotation) * offsetPhonePx * scale;
 
-        var drawCX = cx + offCamX;
-        var drawCY = cy + offCamY;
+        // "Down" direction on the phone in camera space: (-sin θ, cos θ).
+        // Content-area centre is mdisp/2 + 8 + daH/2 CSS px below marker centre.
+        // Phone physical centre is (daH/2 + 4) CSS px below marker centre.
+        var sinR = Math.sin(rotation), cosR = Math.cos(rotation);
+        var offsetPhonePx  = mdisp / 2 + 8 + daH / 2; // marker → content-area centre
+        var phoneCtOffsetPx = daH / 2 + 4;             // marker → phone physical centre
 
-        // Normalised position of the drawing-area centre
-        var phoneNX = invertControls ? 1 - drawCX / W : drawCX / W;
-        var phoneNY = invertControls ? 1 - drawCY / H : drawCY / H;
+        var drawCX = cx + (-sinR) * offsetPhonePx  * scale;
+        var drawCY = cy + ( cosR) * offsetPhonePx  * scale;
+        var phoneCX = cx + (-sinR) * phoneCtOffsetPx * scale;
+        var phoneCY = cy + ( cosR) * phoneCtOffsetPx * scale;
 
-        // WB viewport dimensions
+        // Normalised positions (0–1 in camera frame)
+        var phoneNX       = invertControls ? 1 - drawCX  / W : drawCX  / W;
+        var phoneNY       = invertControls ? 1 - drawCY  / H : drawCY  / H;
+        var phoneCenterNX = invertControls ? 1 - phoneCX / W : phoneCX / W;
+        var phoneCenterNY = invertControls ? 1 - phoneCY / H : phoneCY / H;
+
+        // Content zoom from the size slider (controls how much content is shown)
+        var contentZoom = getPhoneScale();
+
+        // WB viewport dimensions — scale by contentZoom so the slider widens
+        // or narrows the whiteboard area visible on the phone.
         var wbX   = phoneNX * WB_W;
         var wbY   = phoneNY * WB_H;
-        var wbVpW = (daW * scale / W) * WB_W;
-        var wbVpH = (daH * scale / H) * WB_H;
+        var wbVpW = (daW * scale / W) * WB_W * contentZoom;
+        var wbVpH = (daH * scale / H) * WB_H * contentZoom;
 
         markerInfos[id] = {
           id:            id,
           nx:            phoneNX,
           ny:            phoneNY,
+          phoneCenterNX: phoneCenterNX,
+          phoneCenterNY: phoneCenterNY,
           rotation:      rotation,
           markerSidePx:  markerSidePx,
           drawAreaW:     daW,
@@ -309,6 +328,7 @@
           wbY:           wbY,
           wbVpW:         wbVpW,
           wbVpH:         wbVpH,
+          contentZoom:   contentZoom,
           corners:       corners
         };
       });
@@ -365,12 +385,28 @@
   function drawOverlay(markerInfos) {
     if (!webcamVideo.videoWidth) return;
     var vw = webcamVideo.videoWidth, vh = webcamVideo.videoHeight;
-    if (overlayCanvas.width !== vw || overlayCanvas.height !== vh) {
-      overlayCanvas.width  = vw;
-      overlayCanvas.height = vh;
-    }
-    overlayCtx.clearRect(0, 0, vw, vh);
 
+    // Size the canvas buffer to the container so 1 canvas px = 1 CSS px.
+    // The video uses object-fit:cover so we must compute the same crop/scale
+    // to correctly overlay markers at their true screen positions.
+    var container = overlayCanvas.parentElement;
+    var cw = container.clientWidth  || vw;
+    var ch = container.clientHeight || vh;
+    if (overlayCanvas.width !== cw || overlayCanvas.height !== ch) {
+      overlayCanvas.width  = cw;
+      overlayCanvas.height = ch;
+    }
+    overlayCtx.clearRect(0, 0, cw, ch);
+
+    // object-fit:cover: scale so the video fills the container in both axes,
+    // then centre-crop.  Transform converts video-source coords → canvas px.
+    var coverScale = Math.max(cw / vw, ch / vh);
+    var offX = (cw - vw * coverScale) / 2;
+    var offY = (ch - vh * coverScale) / 2;
+    overlayCtx.save();
+    overlayCtx.setTransform(coverScale, 0, 0, coverScale, offX, offY);
+
+    // All drawing below uses video-source coordinates (vw × vh).
     var ids = Object.keys(markerInfos);
     if (ids.length === 0) {
       // Searching indicator
@@ -381,6 +417,7 @@
       overlayCtx.fillStyle = '#e2e2e2';
       overlayCtx.font = 'bold 12px monospace';
       overlayCtx.fillText('SEARCHING MARKER', 34, 24);
+      overlayCtx.restore();
       return;
     }
 
@@ -417,34 +454,36 @@
       overlayCtx.moveTo(cx2, cy2 - 12); overlayCtx.lineTo(cx2, cy2 + 12);
       overlayCtx.stroke();
 
-      // Draw-area centre cross (corrected position)
+      // Phone physical-centre cross (green)
       overlayCtx.strokeStyle = '#34d399';
       overlayCtx.lineWidth = 1.5;
-      var dcx = info.nx * vw, dcy = info.ny * vh;
+      var pcx = (info.phoneCenterNX != null ? info.phoneCenterNX : info.nx) * vw;
+      var pcy = (info.phoneCenterNY != null ? info.phoneCenterNY : info.ny) * vh;
       overlayCtx.beginPath();
-      overlayCtx.moveTo(dcx - 10, dcy); overlayCtx.lineTo(dcx + 10, dcy);
-      overlayCtx.moveTo(dcx, dcy - 10); overlayCtx.lineTo(dcx, dcy + 10);
+      overlayCtx.moveTo(pcx - 10, pcy); overlayCtx.lineTo(pcx + 10, pcy);
+      overlayCtx.moveTo(pcx, pcy - 10); overlayCtx.lineTo(pcx, pcy + 10);
       overlayCtx.stroke();
 
-      // Rotation arrow from marker centre
+      // Rotation arrow from phone physical centre
       var arrowLen = 28;
       overlayCtx.strokeStyle = '#fbbf24';
       overlayCtx.lineWidth = 2;
       overlayCtx.beginPath();
-      overlayCtx.moveTo(cx2, cy2);
-      overlayCtx.lineTo(cx2 + Math.cos(info.rotation) * arrowLen,
-                         cy2 + Math.sin(info.rotation) * arrowLen);
+      overlayCtx.moveTo(pcx, pcy);
+      overlayCtx.lineTo(pcx + Math.cos(info.rotation) * arrowLen,
+                         pcy + Math.sin(info.rotation) * arrowLen);
       overlayCtx.stroke();
 
-      // Label
+      // Label at phone centre
       overlayCtx.fillStyle = 'rgba(0,0,0,0.6)';
-      overlayCtx.fillRect(cx2 + 14, cy2 - 13, 80, 18);
+      overlayCtx.fillRect(pcx + 14, pcy - 13, 80, 18);
       overlayCtx.fillStyle = color;
       overlayCtx.font = 'bold 11px monospace';
       overlayCtx.fillText('ID ' + info.id +
         '  ' + info.nx.toFixed(2) + ',' + info.ny.toFixed(2),
-        cx2 + 17, cy2);
+        pcx + 17, pcy);
     });
+    overlayCtx.restore();
   }
 
   // Start with the map example
