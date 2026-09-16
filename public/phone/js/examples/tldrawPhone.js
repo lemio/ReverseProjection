@@ -35,6 +35,8 @@ window.TldrawPhone = (function () {
   var _pendingDiff   = null;
   var _snapshotTimer = null;
   var _pendingSnap   = null;
+  var _pointerDown   = false;  // camera is frozen while a finger is on the canvas
+  var _pointerEvents = null;
 
   /* ── CSS injection ─────────────────────────────────────────────────── */
   function _injectCss() {
@@ -53,12 +55,25 @@ window.TldrawPhone = (function () {
 
     _injectCss();
 
+    // The container sits inside the tracking border (#example-area is inset
+    // by it) and stops above the status bar, so no tldraw UI hides under either.
+    var statusBar = document.getElementById('status-bar');
+    var bottom = statusBar ? statusBar.offsetHeight : 0;
     contentEl.innerHTML =
-      '<div id="tdlp-root" style="position:absolute;inset:0;overflow:hidden;"></div>' +
+      '<div id="tdlp-root" style="position:absolute;inset:0;bottom:' + bottom + 'px;overflow:hidden;"></div>' +
       '<div id="tdlp-msg" style="position:absolute;inset:0;display:flex;' +
-      '     align-items:center;justify-content:center;background:#0f0f0f;' +
+      '     align-items:center;justify-content:center;background:#ffffff;' +
       '     color:#555;font-size:12px;font-family:sans-serif;pointer-events:none;">' +
       '     Loading whiteboard\u2026</div>';
+
+    // tldraw is fetched from esm.sh; say so if that takes unusually long
+    var loadStart = Date.now();
+    var slowTimer = setTimeout(function () {
+      var msg = document.getElementById('tdlp-msg');
+      if (msg && msg.style.display !== 'none') {
+        msg.textContent = 'Still loading the whiteboard library from esm.sh\u2026 (check the phone\u2019s internet connection)';
+      }
+    }, 15000);
 
     Promise.all([
       import(REACT_ESM),
@@ -72,24 +87,70 @@ window.TldrawPhone = (function () {
       var rootEl = document.getElementById('tdlp-root');
       if (!rootEl) return;
 
+      // Toolbar with five tools: at the width left inside the border, tldraw's
+      // default toolbar would overflow under the border. With exactly five
+      // items it needs no overflow button (tldraw shows 5 before overflowing
+      // at this width) and fits next to the style button.
+      var h = React.createElement;
+      function PhoneToolbar() {
+        return h(TL.DefaultToolbar, null,
+          h(TL.SelectToolbarItem), h(TL.DrawToolbarItem), h(TL.EraserToolbarItem),
+          h(TL.NoteToolbarItem), h(TL.TextToolbarItem));
+      }
+
       // forceMobile activates tldraw's built-in mobile UI: a single bottom
       // toolbar with all tools and style settings, with no desktop-only panels.
       _root = createRoot(rootEl);
       _root.render(
         React.createElement(TL.Tldraw, {
           forceMobile: true,
+          components: { Toolbar: PhoneToolbar, PageMenu: null },
+          // The camera follows the phone's tracked position (set with force:true
+          // below), so pinch/scroll panning on the phone itself is disabled.
+          cameraOptions: { isLocked: true },
           onMount: function (editor) { _onMount(editor); }
         })
       );
+
+      clearTimeout(slowTimer);
+      console.log('[TldrawPhone] tldraw loaded in ' + (Date.now() - loadStart) + ' ms');
+      _bindPointerFreeze(rootEl);
 
       var msg = document.getElementById('tdlp-msg');
       if (msg) msg.style.display = 'none';
 
     }).catch(function (err) {
+      clearTimeout(slowTimer);
       console.error('[TldrawPhone] Failed to load tldraw:', err);
       var msg = document.getElementById('tdlp-msg');
       if (msg) msg.textContent = 'Whiteboard failed to load';
     });
+  }
+
+  /*
+   * While the user is drawing, the tracked camera keeps moving (the phone is
+   * hand-held, and tracking has some jitter and lag). Since ink is placed in
+   * whiteboard coordinates, that makes the stroke land next to the finger.
+   * Freeze the camera between pointerdown and pointerup — the same trick the
+   * map example uses — and catch up with the latest viewport afterwards.
+   */
+  function _bindPointerFreeze(rootEl) {
+    var down = function () { _pointerDown = true; };
+    var up = function () {
+      if (!_pointerDown) return;
+      _pointerDown = false;
+      if (_lastVp) _setCamera(_lastVp);
+    };
+    rootEl.addEventListener('pointerdown', down, true);
+    rootEl.addEventListener('pointerup', up, true);
+    rootEl.addEventListener('pointercancel', up, true);
+    window.addEventListener('pointerup', up, true);
+    _pointerEvents = function () {
+      rootEl.removeEventListener('pointerdown', down, true);
+      rootEl.removeEventListener('pointerup', up, true);
+      rootEl.removeEventListener('pointercancel', up, true);
+      window.removeEventListener('pointerup', up, true);
+    };
   }
 
   function _onMount(editor) {
@@ -183,6 +244,7 @@ window.TldrawPhone = (function () {
   // outbound store listener (source='user') and is not sent back to the server.
   function _setCamera(vp) {
     if (!vp || !vp.wbW || !vp.wbH || !_editor) return;
+    if (_pointerDown) return;   // frozen while drawing — see _bindPointerFreeze
 
     var rootEl  = document.getElementById('tdlp-root');
     var canvasW = rootEl ? (rootEl.clientWidth  || 375) : 375;
@@ -198,7 +260,7 @@ window.TldrawPhone = (function () {
       // so camera.x = -wbLeft places wbLeft at screen x=0.
       _editor.setCamera(
         { x: -vp.wbLeft, y: -vp.wbTop, z: zoom },
-        { immediate: true }
+        { immediate: true, force: true }
       );
     });
   }
@@ -214,12 +276,22 @@ window.TldrawPhone = (function () {
     }
   }
 
+  // Size of the tldraw canvas in CSS px — reported to the laptop as the
+  // phone's active area (it sits at the top of the area inside the border).
+  function getViewportMetrics() {
+    var rootEl = document.getElementById('tdlp-root');
+    if (!rootEl || !rootEl.clientWidth) return null;
+    return { width: rootEl.clientWidth, height: rootEl.clientHeight };
+  }
+
   function invalidate() {
     if (_lastVp) _setCamera(_lastVp);
   }
 
   /* ── Destroy ────────────────────────────────────────────────────────── */
   function destroy() {
+    if (_pointerEvents) { _pointerEvents(); _pointerEvents = null; }
+    _pointerDown = false;
     if (_storeUnsub)    { _storeUnsub();                _storeUnsub    = null; }
     if (_syncTimer)     { clearTimeout(_syncTimer);     _syncTimer     = null; }
     if (_snapshotTimer) { clearTimeout(_snapshotTimer); _snapshotTimer = null; }
@@ -231,5 +303,5 @@ window.TldrawPhone = (function () {
     console.log('[TldrawPhone] destroyed');
   }
 
-  return { init, onState, invalidate, destroy, onTldrawDiff, onTldrawSnapshot };
+  return { init, onState, invalidate, destroy, onTldrawDiff, onTldrawSnapshot, getViewportMetrics };
 })();

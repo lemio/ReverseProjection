@@ -6,7 +6,9 @@ const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+// tldraw snapshots (sent by phones and laptops) can exceed socket.io's 1 MB
+// default; an oversized message makes the server drop the connection.
+const io = new Server(server, { maxHttpBufferSize: 50e6 });
 
 /* ── LAN IP detection ─────────────────────────────────────────────────────── */
 function getLanIp() {
@@ -47,6 +49,40 @@ app.use('/phone', express.static(path.join(__dirname, 'public', 'phone')));
 
 // Serve remaining static files from public/
 app.use(express.static(path.join(__dirname, 'public')));
+
+// 8th Wall engine (xr.js loads its xr-slam.js chunk from the same folder)
+app.use('/vendor/xr8', express.static(path.join(__dirname, 'node_modules', '@8thwall', 'engine-binary', 'dist')));
+
+/* ── 8th Wall image targets for the phone tracking border ──────────────────
+ * Generated on demand for each phone screen size (CSS px), e.g.
+ *   /xr8-targets/390x844/targets.json            → [topTarget, bottomTarget]
+ *   /xr8-targets/390x844/border-top_luminance.png
+ */
+const { renderTargets } = require('./tools/imageTarget');
+const targetCache = new Map(); // "WxH" → renderTargets() result
+function getTargets(size) {
+  const m = /^(\d{3,4})x(\d{3,4})$/.exec(size);
+  if (!m) return null;
+  const w = Number(m[1]), h = Number(m[2]);
+  if (w < 200 || h < 200 || w > 2000 || h > 3000) return null;
+  const key = w + 'x' + h;
+  if (!targetCache.has(key)) {
+    if (targetCache.size > 50) targetCache.clear();
+    targetCache.set(key, renderTargets(w, h, { baseUrl: `/xr8-targets/${key}/` }));
+  }
+  return targetCache.get(key);
+}
+app.get('/xr8-targets/:size/targets.json', (req, res) => {
+  const targets = getTargets(req.params.size);
+  if (!targets) return res.status(400).send('size must be WIDTHxHEIGHT in CSS px');
+  res.json(targets.map((t) => t.json));
+});
+app.get('/xr8-targets/:size/:file', (req, res) => {
+  const targets = getTargets(req.params.size);
+  const t = targets && targets.find((x) => x.luminanceFile === req.params.file);
+  if (!t) return res.status(404).send('not found');
+  res.type('png').set('Cache-Control', 'public, max-age=86400').send(t.luminancePng);
+});
 
 /* ── Config endpoint — exposes the LAN phone URL ──────────────────────────── */
 app.get('/api/config', (req, res) => {
@@ -133,6 +169,9 @@ io.on('connection', (socket) => {
     socket.to(ROOM).emit('webrtc:signal', Object.assign({}, data, { from: socket.id }));
   });
   socket.on('webrtc:ready',   (data) => { socket.to(ROOM).emit('webrtc:ready', data); });
+  // 8th Wall border tracking test page (/xr8-test.html ↔ /phone/border-test.html)
+  socket.on('xr8test:mode',   (data) => { socket.to(ROOM).emit('xr8test:mode', data); });
+  socket.on('xr8test:hello',  (data) => { socket.to(ROOM).emit('xr8test:hello', data); });
   socket.on('webrtc:stream-state', (data) => { socket.to(ROOM).emit('webrtc:stream-state', data); });
 
   // ── tldraw real-time sync ─────────────────────────────────────────────────

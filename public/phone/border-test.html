@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Border tracking test — phone</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #fff;
+      font-family: system-ui, sans-serif; color: #1a1a1a; }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #middle { z-index: 1; }
+    #border { z-index: 2; pointer-events: none; }
+    #ui { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      display: flex; flex-direction: column; gap: 8px; align-items: stretch; width: 60%; }
+    #ui button { font: inherit; font-size: 15px; padding: 10px; border-radius: 8px;
+      border: 1px solid #ccc; background: #f4f4f4; color: #1a1a1a; }
+    #ui button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+    #info { font-size: 12px; text-align: center; color: #666; background: rgba(255,255,255,.85);
+      padding: 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <canvas id="middle"></canvas>
+  <canvas id="border"></canvas>
+  <div id="ui">
+    <div id="info">connecting…</div>
+    <button data-mode="white" class="active">Middle: plain white</button>
+    <button data-mode="drawing">Middle: drawing</button>
+    <button data-mode="busy">Middle: busy animation</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/phone/js/borderPattern.js"></script>
+  <script>
+  (function () {
+    var borderCanvas = document.getElementById('border');
+    var middleCanvas = document.getElementById('middle');
+    var info = document.getElementById('info');
+    var mode = 'white';
+    var borderPx = 0;
+    var markerId = null;
+
+    function fit(canvas) {
+      var dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(innerWidth * dpr);
+      canvas.height = Math.round(innerHeight * dpr);
+      var ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return ctx;
+    }
+
+    function drawBorder() {
+      var ctx = fit(borderCanvas);
+      borderPx = BorderPattern.draw(ctx, innerWidth, innerHeight);
+      fit(middleCanvas);
+      updateInfo();
+    }
+
+    function updateInfo() {
+      info.textContent = innerWidth + ' × ' + innerHeight + ' @' + (window.devicePixelRatio || 1) +
+        'x · phone ' + (markerId == null ? '…' : markerId) + ' · ' + mode;
+    }
+
+    // ── Middle content (drawn inside the border only) ──────────────────
+    var strokes = [];
+    function randomStroke() {
+      var b = borderPx, w = innerWidth - 2 * b, h = innerHeight - 2 * b;
+      var pts = [], x = b + Math.random() * w, y = b + Math.random() * h;
+      for (var i = 0; i < 25; i++) {
+        x = Math.min(innerWidth - b, Math.max(b, x + (Math.random() - 0.5) * 40));
+        y = Math.min(innerHeight - b, Math.max(b, y + (Math.random() - 0.5) * 40));
+        pts.push([x, y]);
+      }
+      var colors = ['#1d1d1d', '#e03131', '#1971c2', '#2f9e44', '#f08c00'];
+      return { pts: pts, color: colors[Math.floor(Math.random() * colors.length)], width: 2 + Math.random() * 6 };
+    }
+
+    var t0 = performance.now();
+    function frame(now) {
+      requestAnimationFrame(frame);
+      var ctx = middleCanvas.getContext('2d');
+      var b = borderPx, W = innerWidth, H = innerHeight;
+      ctx.clearRect(0, 0, W, H);
+      if (mode === 'white') return;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(b, b, W - 2 * b, H - 2 * b);
+      ctx.clip();
+
+      if (mode === 'drawing') {
+        if (strokes.length < 40 && Math.random() < 0.1) strokes.push(randomStroke());
+        strokes.forEach(function (s) {
+          ctx.strokeStyle = s.color; ctx.lineWidth = s.width; ctx.lineCap = 'round';
+          ctx.beginPath();
+          s.pts.forEach(function (p, i) { i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); });
+          ctx.stroke();
+        });
+      } else if (mode === 'busy') {
+        // High-contrast moving shapes, text and checkerboard: worst case for a feature tracker
+        var t = (now - t0) / 1000;
+        for (var i = 0; i < 30; i++) {
+          var px = b + ((Math.sin(t * 0.7 + i * 1.3) + 1) / 2) * (W - 2 * b);
+          var py = b + ((Math.cos(t * 0.5 + i * 2.1) + 1) / 2) * (H - 2 * b);
+          ctx.fillStyle = i % 3 === 0 ? '#000' : BorderPattern.COLORS[i % BorderPattern.COLORS.length];
+          ctx.fillRect(px - 15, py - 10, 30 + (i % 4) * 10, 20);
+        }
+        var cell = 14, ox = (t * 20) % (cell * 2);
+        for (var gy = 0; gy < 6; gy++) for (var gx = -2; gx < 20; gx++) {
+          if ((gx + gy) % 2) continue;
+          ctx.fillStyle = '#000';
+          ctx.fillRect(b + 20 + gx * cell + ox, H / 2 - 42 + gy * cell, cell, cell);
+        }
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 28px system-ui';
+        ctx.fillText('TRACK ME ' + Math.floor(t), b + 20, b + 60);
+      }
+      ctx.restore();
+    }
+    requestAnimationFrame(frame);
+
+    // ── Mode buttons ───────────────────────────────────────────────────
+    document.querySelectorAll('#ui button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        mode = btn.dataset.mode;
+        strokes = [];
+        document.querySelectorAll('#ui button').forEach(function (b) { b.classList.toggle('active', b === btn); });
+        updateInfo();
+        emitMode();
+      });
+    });
+
+    // ── Socket: register as a phone so the laptop loads our targets ────
+    var socket = io();
+    function clientId() {
+      try {
+        var id = localStorage.getItem('rpClientId');
+        if (!id) { id = 'test-' + Math.random().toString(16).slice(2); localStorage.setItem('rpClientId', id); }
+        return id;
+      } catch (e) { return 'test-' + Math.random().toString(16).slice(2); }
+    }
+    function emitViewport() {
+      if (markerId == null) return;
+      socket.emit('phone:viewport', {
+        markerId: markerId, borderPx: borderPx,
+        screenW: innerWidth, screenH: innerHeight,
+        drawAreaW: innerWidth - 2 * borderPx, drawAreaH: innerHeight - 2 * borderPx
+      });
+    }
+    function emitMode() {
+      if (markerId != null) socket.emit('xr8test:mode', { markerId: markerId, mode: mode });
+    }
+    socket.on('connect', function () {
+      socket.emit('device:register', { type: 'phone', clientId: clientId() });
+    });
+    socket.on('device:registered', function (d) {
+      markerId = d.markerId;
+      updateInfo();
+      emitViewport();
+      emitMode();
+    });
+    // A laptop (re)connected — resend what it needs
+    socket.on('config:change', function () { emitViewport(); emitMode(); });
+    socket.on('xr8test:hello', function () { emitViewport(); emitMode(); });
+
+    window.addEventListener('resize', function () { drawBorder(); emitViewport(); });
+    drawBorder();
+  })();
+  </script>
+</body>
+</html>

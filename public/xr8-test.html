@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>8th Wall border tracking test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0f0f0f; color: #e2e2e2;
+      font: 13px/1.4 system-ui, sans-serif; }
+    #app { display: flex; height: 100%; }
+    #view { position: relative; flex: 1; min-width: 0; background: #000; }
+    #xr-canvas, #overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #overlay { pointer-events: none; }
+    #side { width: 360px; flex: none; overflow-y: auto; padding: 16px; border-left: 1px solid #222;
+      display: flex; flex-direction: column; gap: 14px; }
+    h1 { font-size: 15px; }
+    h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #888; margin-bottom: 6px; }
+    .hint { color: #888; font-size: 12px; }
+    code { background: #1c1c1c; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+    #checks { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    #checks li { display: grid; grid-template-columns: 20px 1fr; gap: 6px; }
+    #checks li .mark { font-weight: 700; color: #555; }
+    #checks li.ok .mark { color: #34d399; }
+    #checks li.fail .mark { color: #f87171; }
+    #checks li .detail { grid-column: 2; color: #888; font-size: 12px; }
+    #stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-family: ui-monospace, monospace; font-size: 12px; }
+    #stats dt { color: #888; }
+    #manual { display: flex; gap: 6px; align-items: center; }
+    #manual input { width: 64px; background: #1c1c1c; color: #e2e2e2; border: 1px solid #333; border-radius: 4px; padding: 3px 5px; }
+    button { background: #1c1c1c; color: #e2e2e2; border: 1px solid #333; border-radius: 4px; padding: 4px 8px; cursor: pointer; }
+    #log { font-family: ui-monospace, monospace; font-size: 11px; color: #aaa; white-space: pre-wrap;
+      background: #151515; border-radius: 4px; padding: 6px; max-height: 220px; overflow-y: auto; }
+    @media (max-width: 800px) {
+      #app { flex-direction: column; }
+      #view { flex: none; height: 60vh; }
+      #side { width: auto; border-left: 0; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="view">
+    <canvas id="xr-canvas"></canvas>
+    <canvas id="overlay"></canvas>
+  </div>
+  <aside id="side">
+    <div>
+      <h1>8th Wall border tracking test</h1>
+      <p class="hint">Open <code id="phone-url">/phone/border-test.html</code> on the phone, then hold it in view of this webcam and move it around. Switch the phone's middle mode to check that the middle content doesn't disturb tracking.</p>
+    </div>
+
+    <section>
+      <h2>Checklist</h2>
+      <ul id="checks"></ul>
+    </section>
+
+    <section>
+      <h2>Live</h2>
+      <dl id="stats"></dl>
+    </section>
+
+    <section>
+      <h2>Phone size</h2>
+      <div id="manual">
+        <input id="mw" type="number" placeholder="width"> ×
+        <input id="mh" type="number" placeholder="height">
+        <button id="mset">Use</button>
+      </div>
+      <p class="hint">Filled in automatically when a phone connects. Set it by hand only if you're testing without the socket connection.</p>
+    </section>
+
+    <section>
+      <h2>Engine events</h2>
+      <div id="log"></div>
+    </section>
+  </aside>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/vendor/xr8/xr.js" async data-preload-chunks="slam"></script>
+<script src="/js/xr8Tracker.js"></script>
+<script>
+(function () {
+  var xrCanvas = document.getElementById('xr-canvas');
+  var overlay = document.getElementById('overlay');
+  var octx = overlay.getContext('2d');
+  var logEl = document.getElementById('log');
+
+  function log(msg) {
+    var t = new Date().toLocaleTimeString();
+    logEl.textContent = t + '  ' + msg + '\n' + logEl.textContent.slice(0, 4000);
+  }
+
+  // ── Checklist ────────────────────────────────────────────────────────
+  var CHECKS = [
+    ['engine',   '8th Wall engine runs on this laptop'],
+    ['camera',   'Webcam feed running'],
+    ['phone',    'Phone connected, screen size known'],
+    ['targets',  'Border image targets loaded'],
+    ['found',    'Phone border recognised'],
+    ['both',     'Top and bottom targets tracked at the same time'],
+    ['moving',   'Keeps tracking while the phone moves (static webcam)'],
+    ['rotation', 'Keeps tracking with the phone rotated ±25°'],
+    ['middle',   'Keeps tracking with drawing / busy content in the middle']
+  ];
+  var checkEls = {};
+  CHECKS.forEach(function (c) {
+    var li = document.createElement('li');
+    li.innerHTML = '<span class="mark">○</span><span class="label"></span><span class="detail"></span>';
+    li.querySelector('.label').textContent = c[1];
+    document.getElementById('checks').appendChild(li);
+    checkEls[c[0]] = li;
+  });
+  function check(key, ok, detail) {
+    var li = checkEls[key];
+    if (li.classList.contains('ok') && ok !== false) { if (detail) li.querySelector('.detail').textContent = detail; return; }
+    li.classList.toggle('ok', ok === true);
+    li.classList.toggle('fail', ok === false);
+    li.querySelector('.mark').textContent = ok === true ? '✓' : ok === false ? '✗' : '○';
+    if (detail != null) li.querySelector('.detail').textContent = detail;
+  }
+
+  // ── Phone connection ─────────────────────────────────────────────────
+  var socket = io();
+  var phones = {};       // markerId → {screenW, screenH, borderPx}
+  var middleMode = {};   // markerId → 'white' | 'drawing' | 'busy'
+
+  fetch('/api/config').then(function (r) { return r.json(); }).then(function (cfg) {
+    if (cfg.phoneUrl) document.getElementById('phone-url').textContent = cfg.phoneUrl.replace(/\/phone$/, '/phone/border-test.html');
+  }).catch(function () {});
+
+  socket.on('connect', function () {
+    socket.emit('device:register', { type: 'laptop' });
+    socket.emit('xr8test:hello', {});
+  });
+  socket.on('phone:viewport', function (d) {
+    if (d.markerId == null || !d.screenW) return;
+    var prev = phones[d.markerId];
+    phones[d.markerId] = { screenW: d.screenW, screenH: d.screenH, borderPx: d.borderPx };
+    if (!prev || prev.screenW !== d.screenW || prev.screenH !== d.screenH) {
+      log('phone ' + d.markerId + ' screen ' + d.screenW + '×' + d.screenH + ' border ' + d.borderPx + 'px');
+      document.getElementById('mw').value = d.screenW;
+      document.getElementById('mh').value = d.screenH;
+    }
+    applyPhones();
+  });
+  socket.on('xr8test:mode', function (d) {
+    if (middleMode[d.markerId] !== d.mode) log('phone ' + d.markerId + ' middle → ' + d.mode);
+    middleMode[d.markerId] = d.mode;
+  });
+  socket.on('device:status', function (d) {
+    if (d.type === 'phone' && !d.connected && d.markerId != null) {
+      delete phones[d.markerId];
+      applyPhones();
+    }
+  });
+  document.getElementById('mset').addEventListener('click', function () {
+    var w = parseInt(document.getElementById('mw').value, 10), h = parseInt(document.getElementById('mh').value, 10);
+    if (w && h) { phones[999] = { screenW: w, screenH: h, borderPx: 0 }; applyPhones(); }
+  });
+  function applyPhones() {
+    var ids = Object.keys(phones);
+    check('phone', ids.length > 0 ? true : null, ids.map(function (id) {
+      return 'phone ' + id + ': ' + phones[id].screenW + '×' + phones[id].screenH;
+    }).join(', '));
+    XR8Tracker.setPhones(ids.map(function (id) {
+      return { id: Number(id), screenW: phones[id].screenW, screenH: phones[id].screenH };
+    }));
+  }
+
+  // ── Tracking statistics ──────────────────────────────────────────────
+  var stats = {
+    frames: 0, trackedFrames: 0, fps: 0, lastFpsT: performance.now(), lastFpsFrames: 0,
+    minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity,
+    minRot: Infinity, maxRot: -Infinity, rot0: null,
+    streakStart: null, longestStreak: 0,
+    middleTracked: { drawing: 0, busy: 0 },
+    parts: '-', lastCenter: null, jitter: 0
+  };
+
+  function onFrame(frame) {
+    var now = performance.now();
+    stats.frames++;
+    if (now - stats.lastFpsT > 1000) {
+      stats.fps = (stats.frames - stats.lastFpsFrames) * 1000 / (now - stats.lastFpsT);
+      stats.lastFpsT = now; stats.lastFpsFrames = stats.frames;
+    }
+
+    var ids = Object.keys(frame.phones);
+    var p = ids.length ? frame.phones[ids[0]] : null;
+    drawOverlay(frame, ids);
+
+    if (!p) {
+      stats.parts = '-';
+      stats.streakStart = null;
+      renderStats(frame);
+      return;
+    }
+    var pid = p.id;
+    stats.trackedFrames++;
+    stats.parts = p.parts.slice().sort().join(' + ');
+    check('found', true, 'first found at ' + new Date().toLocaleTimeString());
+    if (p.parts.length === 2) check('both', true);
+
+    // Movement: travel of the phone centre across the camera frame
+    var c = p.project(p.screenW / 2, p.screenH / 2);
+    var tl = p.project(0, 0), tr = p.project(p.screenW, 0);
+    if (c && tl && tr) {
+      var nx = c.x / frame.camW, ny = c.y / frame.camH;
+      stats.minX = Math.min(stats.minX, nx); stats.maxX = Math.max(stats.maxX, nx);
+      stats.minY = Math.min(stats.minY, ny); stats.maxY = Math.max(stats.maxY, ny);
+      if (stats.lastCenter) {
+        var d = Math.hypot(c.x - stats.lastCenter.x, c.y - stats.lastCenter.y);
+        stats.jitter = stats.jitter * 0.9 + d * 0.1;
+      }
+      stats.lastCenter = c;
+
+      var rot = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
+      stats.rot = rot;
+      stats.minRot = Math.min(stats.minRot, rot); stats.maxRot = Math.max(stats.maxRot, rot);
+    }
+
+    if (stats.streakStart == null) stats.streakStart = now;
+    var streak = (now - stats.streakStart) / 1000;
+    stats.longestStreak = Math.max(stats.longestStreak, streak);
+
+    var travel = Math.max(stats.maxX - stats.minX, stats.maxY - stats.minY);
+    check('moving', travel > 0.3 && stats.longestStreak > 3 ? true : null,
+      'travel ' + Math.round(travel * 100) + '% of frame · longest continuous track ' + stats.longestStreak.toFixed(1) + ' s');
+    check('rotation', stats.minRot < -25 && stats.maxRot > 25 ? true : null,
+      'seen ' + Math.round(stats.minRot) + '° … ' + Math.round(stats.maxRot) + '°');
+
+    // Middle content: count seconds tracked per middle mode
+    var mode = middleMode[pid];
+    if (mode === 'drawing' || mode === 'busy') stats.middleTracked[mode] += 1 / Math.max(stats.fps, 1);
+    check('middle', stats.middleTracked.drawing > 5 && stats.middleTracked.busy > 5 ? true : null,
+      'tracked with drawing ' + stats.middleTracked.drawing.toFixed(1) + ' s, busy ' +
+      stats.middleTracked.busy.toFixed(1) + ' s (need 5 s each)');
+
+    renderStats(frame);
+  }
+
+  var statsEl = document.getElementById('stats');
+  var lastStatsRender = 0;
+  function renderStats(frame) {
+    var now = performance.now();
+    if (now - lastStatsRender < 250) return;
+    lastStatsRender = now;
+    var rows = [
+      ['camera fps', stats.fps.toFixed(1)],
+      ['canvas', Math.round(frame.camW) + '×' + Math.round(frame.camH) + ' css px'],
+      ['tracked', stats.frames ? Math.round(100 * stats.trackedFrames / stats.frames) + '% of frames' : '-'],
+      ['targets', stats.parts],
+      ['rotation', stats.rot != null ? stats.rot.toFixed(1) + '°' : '-'],
+      ['centre jitter', stats.jitter.toFixed(2) + ' px/frame']
+    ];
+    statsEl.innerHTML = '';
+    rows.forEach(function (r) {
+      var dt = document.createElement('dt'); dt.textContent = r[0];
+      var dd = document.createElement('dd'); dd.textContent = r[1];
+      statsEl.appendChild(dt); statsEl.appendChild(dd);
+    });
+  }
+
+  // ── Overlay ─────────────────────────────────────────────────────────
+  function poly(pts, color, width, dash) {
+    if (!pts || pts.some(function (q) { return !q; })) return;
+    octx.strokeStyle = color; octx.lineWidth = width; octx.setLineDash(dash || []);
+    octx.beginPath();
+    pts.forEach(function (q, i) { i ? octx.lineTo(q.x, q.y) : octx.moveTo(q.x, q.y); });
+    octx.closePath(); octx.stroke(); octx.setLineDash([]);
+  }
+  function drawOverlay(frame, ids) {
+    var w = overlay.clientWidth, h = overlay.clientHeight;
+    if (overlay.width !== w || overlay.height !== h) { overlay.width = w; overlay.height = h; }
+    octx.clearRect(0, 0, w, h);
+    ids.forEach(function (id) {
+      var p = frame.phones[id];
+      poly(p.projectRegion('top'), '#4d7cfe', 2, [6, 4]);
+      poly(p.projectRegion('bottom'), '#f59e0b', 2, [6, 4]);
+      poly([p.project(0, 0), p.project(p.screenW, 0), p.project(p.screenW, p.screenH), p.project(0, p.screenH)], '#34d399', 3);
+      var b = (phones[id] && phones[id].borderPx) || 0;
+      poly([p.project(b, b), p.project(p.screenW - b, b), p.project(p.screenW - b, p.screenH - b), p.project(b, p.screenH - b)], '#34d399', 1, [3, 3]);
+      var c = p.project(p.screenW / 2, p.screenH / 2);
+      if (c) {
+        octx.fillStyle = 'rgba(0,0,0,.65)'; octx.fillRect(c.x - 60, c.y - 12, 120, 22);
+        octx.fillStyle = '#34d399'; octx.font = 'bold 12px ui-monospace, monospace'; octx.textAlign = 'center';
+        octx.fillText('phone ' + id + ' · ' + p.parts.join('+'), c.x, c.y + 4); octx.textAlign = 'start';
+      }
+    });
+  }
+
+  // ── Start ───────────────────────────────────────────────────────────
+  window.addEventListener('xrloaded', function () { check('engine', true, 'XR8 loaded'); log('xrloaded'); });
+  setTimeout(function () { if (!window.XR8) check('engine', false, 'xr.js did not load within 20 s — see console'); }, 20000);
+
+  XR8Tracker.start({
+    canvas: xrCanvas,
+    onFrame: onFrame,
+    onStatus: function (text, level) { log('status: ' + text); },
+    onEvent: function (name, d) {
+      switch (name) {
+        case 'started': check('engine', true, 'XR8 running (desktop, world tracking off)'); break;
+        case 'camera':
+          log('camera ' + d.status);
+          if (d.status === 'hasVideo') check('camera', true, d.video ? d.video.videoWidth + '×' + d.video.videoHeight : '');
+          if (d.status === 'failed') check('camera', false, 'camera permission denied or no camera');
+          break;
+        case 'targets': log('configured targets: ' + (d.names.join(', ') || 'none')); break;
+        case 'imageloading': log('loading ' + d.imageTargets.map(function (t) { return t.name; }).join(', ')); break;
+        case 'imagescanning':
+          log('scanning ' + d.imageTargets.map(function (t) { return t.name; }).join(', '));
+          if (d.imageTargets.length) check('targets', true, d.imageTargets.length + ' targets: ' + d.imageTargets.map(function (t) { return t.name; }).join(', '));
+          break;
+        case 'imagefound': log('FOUND ' + d.name); break;
+        case 'imagelost': log('lost ' + d.name); break;
+        case 'exception': log('EXCEPTION ' + d.message); check('engine', false, d.message); break;
+      }
+    }
+  });
+})();
+</script>
+</body>
+</html>

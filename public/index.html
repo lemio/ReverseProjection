@@ -12,8 +12,8 @@
       <div id="brand">ReverseProjection</div>
       <div id="toolbar">
         <div id="tool-group">
-          <button class="tool-btn active" data-example="map">Map</button>
-          <button class="tool-btn" data-example="tldraw">Draw</button>
+          <button class="tool-btn" data-example="map">Map</button>
+          <button class="tool-btn active" data-example="tldraw">Draw</button>
           <button class="tool-btn" data-example="screen">Screen</button>
           <div class="toolbar-sep"></div>
           <div id="phone-size-wrap">
@@ -41,8 +41,7 @@
     </header>
     <main>
       <div id="webcam-container">
-        <video id="webcam" autoplay playsinline muted></video>
-        <canvas id="detection-canvas"></canvas>
+        <canvas id="xr-canvas"></canvas>
         <canvas id="overlay-canvas"></canvas>
       </div>
       <div id="example-panel">
@@ -67,11 +66,12 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- jsartoolkit5: complete bundle (asm.js engine + ARController API) -->
-  <script src="/js/vendor/artoolkit.min.js"></script>
-  <!-- ReverseProjection detection & examples -->
-  <script src="/js/jsarDetector.js"></script>
+  <!-- 8th Wall engine (served from node_modules by server.js) -->
+  <script src="/vendor/xr8/xr.js" async data-preload-chunks="slam"></script>
+  <!-- ReverseProjection tracking & examples -->
+  <script src="/js/xr8Tracker.js"></script>
   <script src="/js/homography.js"></script>
+  <script src="/js/shared/sourceRotate.js"></script>
   <script src="/js/examples/mapExample.js"></script>
   <script src="/js/examples/tldrawExample.js"></script>
   <script src="/js/examples/screenExample.js"></script>

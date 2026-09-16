@@ -11,8 +11,8 @@ Anyone who opens the phone page connects automatically.
 
 ## How It Works
 
-1. The **phone** displays a single ArUco fiducial marker (ID 0) centred at the top of the screen so the webcam can detect and track it.
-2. The **laptop** accesses the webcam, detects the marker using jsartoolkit5, and derives the phone's position and rotation from the marker's four corner vertices.
+1. The **phone** draws a dashed, multi-coloured tracking border around the edge of its screen (plain white inside), and reports its screen size to the laptop.
+2. The **laptop** runs the 8th Wall engine on its (static) webcam. The server generates two 8th Wall image targets for that phone size — the top and bottom 3:4 regions of the screen — and the laptop projects their tracked poses back onto the phone screen to get its position and rotation.
 3. Both devices communicate over WebSockets (Socket.io) through a local Node.js server running on your network.
 4. The laptop map shows a bounding box representing the area currently visible on the phone's mini-map.
 5. Touching the phone screen sends lat/lng coordinates back to the laptop and draws a stroke on both maps simultaneously.
@@ -39,6 +39,12 @@ The important rule is:
 
 - The blue overlay on the laptop must represent the phone's visible content viewport in content space.
 - It must not represent the physical phone body in camera space.
+
+### Screen mode extras
+
+- **Rotate source** cycles the shared screen through 0/90/180/270°. Both the laptop preview and the phone show it rotated; the viewport maths runs in that rotated space.
+- Touching the phone draws a **semi-transparent marker** on top of the stream (like the map example). Marks are stored in source coordinates, so they stay on the same spot of the shared screen whatever the rotation or where the phone points, and they also appear on the laptop preview. **Clear marks** removes them everywhere.
+- The phone's view freezes while a finger is down, so a mark lands where it is drawn.
 
 ### Screen mode mapping
 
@@ -221,32 +227,36 @@ Then open `http://192.168.x.x:3000/phone` on the phone.
 server.js                        Node.js / Express / Socket.io server
 public/
   index.html                     Laptop UI (webcam + overlay + map panel)
+  xr8-test.html                  Border tracking feasibility test (laptop side, with checklist)
   css/style.css                  Dark professional theme
   js/
-    app.js                       Main orchestrator (webcam loop, detection, state)
-    jsarDetector.js              Detects marker ID 0 via jsartoolkit5 — position and rotation from corners
-    homography.js                Perspective-transform math (DLT algorithm)
-    vendor/
-      artoolkit.min.js           jsartoolkit5 self-contained bundle
+    app.js                       Main orchestrator (tracking frames → examples, state, overlay)
+    xr8Tracker.js                8th Wall image-target tracking of the phone border (desktop webcam)
     examples/
       mapExample.js              Leaflet map — phone position to geographic coordinate
   phone/
     index.html                   Phone PWA (auto-connects, no room code needed)
+    border-test.html             Border tracking test (phone side: white / drawing / busy middle)
     manifest.json
     sw.js                        Service worker (offline cache)
     css/phone.css
     js/
       phoneApp.js                Auto-connection and example lifecycle
-      drawMarker.js              Renders ArUco marker patterns onto canvas
+      borderPattern.js           Draws the tracking border (shared with the Node target generator)
       examples/
         mapPhone.js              Leaflet mini-map tracking the phone's geographic position
+tools/
+  imageTarget.js                 Renders the border into 8th Wall image targets (JSON + 480×640 luminance PNG)
+  generate-border-target.js      CLI: write targets for a given phone size (e.g. into an 8th Wall Studio project)
 ```
 
 ---
 
 ## Technical Notes
 
-- Detection uses **jsartoolkit5** with a single 3x3 barcode marker (ID 0) centred at the top of the phone screen. The marker's four corners provide position and rotation.
+- Tracking uses the **8th Wall engine** (`@8thwall/engine-binary`, served from `/vendor/xr8`) with `disableWorldTracking: true` and `allowedDevices: ANY`, which is what lets it run on a laptop webcam. Image targets are generated per phone size at `/xr8-targets/<W>x<H>/targets.json`.
+- 8th Wall planar targets are always 3:4, so each phone gets a top and a bottom target; the white middle has no features, so what the phone shows there is ignored by recognition.
+- To test feasibility, open `/xr8-test.html` on the laptop and `/phone/border-test.html` on the phone. In automated tests (synthetic 720p webcam video) a border of 9% of the screen width was never recognised; 16% (the default) tracked a phone ~117 px wide, including ±30° rotation, movement and a busy middle.
 - The server detects the machine's LAN IP at startup and exposes it via `/api/config` so the laptop app can generate a correct phone URL for the QR code and copy-link button.
 - All devices share a single server session — no room codes or pairing required.
 - The phone mini-map renders at three zoom levels deeper than the laptop map and freezes during active drawing to keep strokes clean.

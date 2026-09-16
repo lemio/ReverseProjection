@@ -37,7 +37,7 @@ window.TldrawExample = (function () {
   var _animFrame     = null;
   var _resizeHandler = null;
 
-  // Phone viewport data (from AR detection) — rotation is not used for tldraw
+  // Phone viewport data (from tracking) — rotation is not used for tldraw
   var _phoneViewports = {};
   var _phoneDetected  = {};
 
@@ -57,6 +57,7 @@ window.TldrawExample = (function () {
     _socket = socket || null;
     _phoneViewports = {};
     _phoneDetected  = {};
+    _track          = {};
 
     _injectCss();
 
@@ -253,26 +254,98 @@ window.TldrawExample = (function () {
   // call it without errors when the toggle is clicked.
   function setRotationEnabled() { /* no-op for tldraw */ }
 
+  /*
+   * Phone movement → whiteboard movement, in the phone's own frame.
+   *
+   * The phone shows drawAreaW × drawAreaH CSS px of whiteboard at zoom
+   * 1/contentZoom (a page rectangle of drawArea × contentZoom), always upright
+   * on its own screen. So movement must be measured along the phone's own
+   * axes and in its own pixels: moving the phone two active-area widths along
+   * its screen's x axis moves that rectangle two widths in page x — also when
+   * the phone is held rotated (landscape) or seen mirrored, and at any
+   * distance from the webcam.
+   *
+   * From the tracked screen corners we build the homography phone px ↔ camera
+   * px. When the phone is (re)found we remember the camera point under the
+   * centre of its active area (the anchor). Each frame that camera point is
+   * mapped back into the phone's current screen coordinates; how far the
+   * phone's centre has moved away from it (in phone px, phone axes) is how far
+   * the page rectangle moves. Being anchor-based, noise doesn't accumulate as
+   * drift, and the view doesn't jump when the phone is found again.
+   */
+  var POS_SMOOTH = 0.5;     // EMA factor for the page position (1 = no smoothing)
+  var _track = {};          // id → {active, page:{x,y}, anchor:{cam, px, py, zoom}}
+
+  function _initialPageCenter() {
+    if (!_editor) return { x: 0, y: 0 };
+    var b = _editor.getViewportPageBounds();
+    return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  }
+
+  function _updatePhone(info) {
+    var t    = _track[info.id] || (_track[info.id] = { active: false, page: null });
+    var zoom = info.contentZoom || 1;
+
+    // Homographies between phone screen px and camera px
+    var sw = info.screenW, sh = info.screenH;
+    var phoneRect = [{ x: 0, y: 0 }, { x: sw, y: 0 }, { x: sw, y: sh }, { x: 0, y: sh }];
+    var toCam   = Homography.computeH(phoneRect, info.screenCorners);
+    var toPhone = Homography.computeH(info.screenCorners, phoneRect);
+    if (!toCam || !toPhone) return _phoneViewports[info.id] || null;
+
+    // Centre of the active (tldraw) area, in phone px
+    var centre = { x: sw / 2, y: info.borderPx + info.drawAreaH / 2 };
+
+    if (!t.page) t.page = _initialPageCenter();
+    // New anchor when (re)found, zoom changed, or the phone switched between
+    // portrait and landscape (its layout axes changed)
+    var layout = sw + 'x' + sh;
+    if (!t.active || !t.anchor || t.anchor.zoom !== zoom || t.anchor.layout !== layout) {
+      t.active = true;
+      t.anchor = { cam: Homography.applyH(toCam, centre), px: t.page.x, py: t.page.y, zoom: zoom, layout: layout };
+    }
+
+    // Where the anchor is now, seen from the phone → how far the phone moved
+    var a = Homography.applyH(toPhone, t.anchor.cam);
+    var target = {
+      x: t.anchor.px + (centre.x - a.x) * zoom,
+      y: t.anchor.py + (centre.y - a.y) * zoom
+    };
+    t.page = {
+      x: t.page.x + (target.x - t.page.x) * POS_SMOOTH,
+      y: t.page.y + (target.y - t.page.y) * POS_SMOOTH
+    };
+
+    var w = info.drawAreaW * zoom, h = info.drawAreaH * zoom;
+    return {
+      id:        info.id,
+      wbLeft:    t.page.x - w / 2,
+      wbTop:     t.page.y - h / 2,
+      wbW:       w,
+      wbH:       h,
+      color:     PHONE_COLORS[info.id % PHONE_COLORS.length],
+      label:     'Phone ' + info.id,
+      drawAreaW: info.drawAreaW,
+      drawAreaH: info.drawAreaH
+    };
+  }
+
   function onAllMarkersPosition(markerInfos) {
+    Object.keys(_track).forEach(function (id) {
+      if (!markerInfos[id]) { _track[id].active = false; _phoneDetected[id] = false; }
+    });
     Object.values(markerInfos).forEach(function (info) {
+      var vp = _updatePhone(info);
+      if (!vp) return;
       _phoneDetected[info.id] = true;
-      _phoneViewports[info.id] = {
-        id:        info.id,
-        wbLeft:    info.wbX - info.wbVpW / 2,
-        wbTop:     info.wbY - info.wbVpH / 2,
-        wbW:       info.wbVpW,
-        wbH:       info.wbVpH,
-        color:     PHONE_COLORS[info.id % PHONE_COLORS.length],
-        label:     'Phone ' + info.id,
-        drawAreaW: info.drawAreaW,
-        drawAreaH: info.drawAreaH
-      };
+      _phoneViewports[info.id] = vp;
     });
   }
 
   function onDetectionChange(isDetected) {
     if (!isDetected) {
       Object.keys(_phoneDetected).forEach(function (id) { _phoneDetected[id] = false; });
+      Object.keys(_track).forEach(function (id) { _track[id].active = false; });
     }
   }
 
@@ -323,6 +396,7 @@ window.TldrawExample = (function () {
     _overlayCtx     = null;
     _phoneViewports = {};
     _phoneDetected  = {};
+    _track          = {};
     console.log('[TldrawExample] destroyed');
   }
 

@@ -13,8 +13,8 @@
 </head>
 <body>
   <div id="phone-app">
-    <!-- AR marker — fixed size, always visible at the top -->
-    <canvas id="marker-single" data-marker-id="0"></canvas>
+    <!-- Tracking border (8th Wall image target) — drawn around the screen edge -->
+    <canvas id="tracking-border"></canvas>
 
     <!-- Spinner shown in top-right when the laptop can't see the marker -->
     <div id="detect-spinner"></div>
@@ -32,14 +32,18 @@
       <div id="example-content"></div>
       <div id="status-bar">
         <span id="example-name">Map</span>
-        <span id="connection-indicator" class="connected">Live</span>
+        <span id="status-right">
+          <span id="connection-indicator" class="connected">Live</span>
+          <button id="fullscreen-btn" type="button" title="Fullscreen">&#9974;</button>
+        </span>
       </div>
     </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/phone/js/drawMarker.js"></script>
+  <script src="/phone/js/borderPattern.js"></script>
+  <script src="/js/shared/sourceRotate.js"></script>
   <script src="/phone/js/examples/mapPhone.js"></script>
   <script src="/phone/js/examples/tldrawPhone.js"></script>
   <script src="/phone/js/examples/screenPhone.js"></script>
@@ -62,12 +66,6 @@
   </script>
   <script src="/phone/js/phoneApp.js"></script>
   <script>
-    // Draw initial marker (ID 0) — phoneApp.js will redraw with the server-assigned ID
-    (function() {
-      var s = document.getElementById('marker-single');
-      drawJSARMarker(s, 0, s.offsetWidth || 280);
-    })();
-
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/phone/sw.js').catch(console.error);
     }

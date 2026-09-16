@@ -17,6 +17,18 @@ window.ScreenExample = (function() {
   var rotationEnabled = false;
   var previewZoom = 2.2;
 
+  // Source rotation (0/90/180/270, clockwise) — the shared screen is shown
+  // rotated on both the laptop preview and the phone.
+  var sourceRotation = 0;
+  var rotateBtn = null;
+  var clearBtn = null;
+
+  // Marker scribbles, per phone, in unrotated source pixels:
+  //   marks[phoneId] = [ [{x, y}, …], … ]   (one array per stroke)
+  var marks = {};
+  var markEpoch = 0;
+  var activeStroke = {};
+
   var PHONE_COLORS = ['#4d7cfe', '#e94560', '#f59e0b', '#34d399', '#a78bfa'];
 
   var rtcConfig = {
@@ -67,6 +79,8 @@ window.ScreenExample = (function() {
       '  <div id="screen-controls">' +
       '    <button id="screen-start">Share Screen</button>' +
       '    <button id="screen-stop">Stop Sharing</button>' +
+      '    <button id="screen-rotate">Rotate source 0\u00b0</button>' +
+      '    <button id="screen-clear">Clear marks</button>' +
       '    <span id="screen-status">Ready</span>' +
       '  </div>' +
       '</div>';
@@ -76,15 +90,39 @@ window.ScreenExample = (function() {
     overlaySvg  = document.getElementById('screen-overlay');
     startBtn    = document.getElementById('screen-start');
     stopBtn     = document.getElementById('screen-stop');
+    rotateBtn   = document.getElementById('screen-rotate');
+    clearBtn    = document.getElementById('screen-clear');
     statusEl    = document.getElementById('screen-status');
 
     stopBtn.style.display = 'none';
+    marks = {};
+    activeStroke = {};
+    updateRotateLabel();
 
     startBtn.addEventListener('click', startSharing);
     stopBtn.addEventListener('click', stopSharing);
+    rotateBtn.addEventListener('click', rotateSource);
+    clearBtn.addEventListener('click', clearMarks);
 
     syncStageLayout();
     animFrame = requestAnimationFrame(renderOverlay);
+  }
+
+  // ── Source rotation ───────────────────────────────────────────────────────
+  function updateRotateLabel() {
+    if (rotateBtn) rotateBtn.textContent = 'Rotate source ' + sourceRotation + '\u00b0';
+  }
+
+  function rotateSource() {
+    sourceRotation = SourceRotate.norm(sourceRotation + 90);
+    updateRotateLabel();
+    syncStageLayout();
+  }
+
+  function clearMarks() {
+    marks = {};
+    activeStroke = {};
+    markEpoch++;   // phones clear when the epoch changes
   }
 
   // ── Overlay canvas (phone outlines drawn over screen preview) ─────────────
@@ -92,20 +130,23 @@ window.ScreenExample = (function() {
     if (!stageEl) return null;
     var stageW = stageEl.clientWidth || 1;
     var stageH = stageEl.clientHeight || 1;
-    var videoW = videoEl && videoEl.videoWidth ? videoEl.videoWidth : 0;
-    var videoH = videoEl && videoEl.videoHeight ? videoEl.videoHeight : 0;
+    var srcW = videoEl && videoEl.videoWidth ? videoEl.videoWidth : 0;
+    var srcH = videoEl && videoEl.videoHeight ? videoEl.videoHeight : 0;
 
-    if (!videoW || !videoH) {
-      return { x: 0, y: 0, width: stageW, height: stageH, videoW: 0, videoH: 0 };
+    if (!srcW || !srcH) {
+      return { x: 0, y: 0, width: stageW, height: stageH, videoW: 0, videoH: 0, srcW: 0, srcH: 0 };
     }
 
+    // Everything below works in rotated space (videoW/videoH = rotated size)
+    var rot = SourceRotate.dims(sourceRotation, srcW, srcH);
+    var videoW = rot.w, videoH = rot.h;
     var fit = Math.min(stageW / videoW, stageH / videoH);
     var width = Math.max(1, videoW * fit);
     var height = Math.max(1, videoH * fit);
     var x = (stageW - width) / 2;
     var y = (stageH - height) / 2;
 
-    return { x: x, y: y, width: width, height: height, videoW: videoW, videoH: videoH };
+    return { x: x, y: y, width: width, height: height, videoW: videoW, videoH: videoH, srcW: srcW, srcH: srcH };
   }
 
   function syncStageLayout() {
@@ -113,10 +154,17 @@ window.ScreenExample = (function() {
     var metrics = getStageMetrics();
     if (!metrics) return null;
 
-    videoEl.style.left = metrics.x.toFixed(1) + 'px';
-    videoEl.style.top = metrics.y.toFixed(1) + 'px';
-    videoEl.style.width = metrics.width.toFixed(1) + 'px';
-    videoEl.style.height = metrics.height.toFixed(1) + 'px';
+    // The <video> is unrotated, so for 90/270 its box is the fitted box with
+    // width/height swapped, centred on the same spot, then CSS-rotated.
+    var sideways = SourceRotate.norm(sourceRotation) % 180 !== 0;
+    var vw = sideways ? metrics.height : metrics.width;
+    var vh = sideways ? metrics.width : metrics.height;
+    videoEl.style.left = (metrics.x + (metrics.width - vw) / 2).toFixed(1) + 'px';
+    videoEl.style.top = (metrics.y + (metrics.height - vh) / 2).toFixed(1) + 'px';
+    videoEl.style.width = vw.toFixed(1) + 'px';
+    videoEl.style.height = vh.toFixed(1) + 'px';
+    videoEl.style.transformOrigin = '50% 50%';
+    videoEl.style.transform = sourceRotation ? 'rotate(' + sourceRotation + 'deg)' : '';
     overlaySvg.style.left = metrics.x.toFixed(1) + 'px';
     overlaySvg.style.top = metrics.y.toFixed(1) + 'px';
     overlaySvg.style.width = metrics.width.toFixed(1) + 'px';
@@ -163,6 +211,8 @@ window.ScreenExample = (function() {
     overlaySvg.innerHTML = '';
     if (!metrics || !metrics.videoW || !metrics.videoH) return;
 
+    drawMarks(metrics);
+
     var ids = Object.keys(latestMarkerInfos);
     if (!ids.length) return;
 
@@ -206,6 +256,53 @@ window.ScreenExample = (function() {
       label.textContent = 'Phone ' + info.id;
       overlaySvg.appendChild(label);
     });
+  }
+
+  // Marker scribbles — stored in source px, drawn in rotated space
+  function drawMarks(metrics) {
+    var width = Math.max(3, metrics.videoW * 0.012);
+    Object.keys(marks).forEach(function(idStr) {
+      var color = PHONE_COLORS[Number(idStr) % PHONE_COLORS.length];
+      marks[idStr].forEach(function(stroke) {
+        if (stroke.length < 1) return;
+        var pts = stroke.map(function(p) {
+          var r = SourceRotate.toRotated(sourceRotation, p.x, p.y, metrics.srcW, metrics.srcH);
+          return r.x.toFixed(1) + ',' + r.y.toFixed(1);
+        }).join(' ');
+        var line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        line.setAttribute('points', pts);
+        line.setAttribute('fill', 'none');
+        line.setAttribute('stroke', color);
+        line.setAttribute('stroke-opacity', '0.4');       // semi-transparent marker
+        line.setAttribute('stroke-width', width.toFixed(1));
+        line.setAttribute('stroke-linecap', 'round');
+        line.setAttribute('stroke-linejoin', 'round');
+        overlaySvg.appendChild(line);
+      });
+    });
+  }
+
+  // Scribbles from a phone (relayed by the server as 'phone:touch').
+  // Points are normalised source coordinates so they stay on the same spot of
+  // the shared screen whatever the rotation or where the phone is pointing.
+  function onPhoneTouch(data) {
+    if (!data || data.kind !== 'screen-mark') return;
+    var id = data.markerId != null ? data.markerId : 0;
+    var metrics = getStageMetrics();
+    if (!metrics || !metrics.srcW) return;
+
+    if (data.type === 'end') { activeStroke[id] = null; return; }
+    if (data.u == null || data.v == null) return;
+    var pt = { x: data.u * metrics.srcW, y: data.v * metrics.srcH };
+
+    if (data.type === 'start' || !activeStroke[id]) {
+      if (!marks[id]) marks[id] = [];
+      activeStroke[id] = [pt];
+      marks[id].push(activeStroke[id]);
+      if (marks[id].length > 200) marks[id].shift();
+    } else {
+      activeStroke[id].push(pt);
+    }
   }
 
   function onAllMarkersPosition(infos) {
@@ -377,12 +474,15 @@ window.ScreenExample = (function() {
         zoom: effectiveZoom,
         rotation: rotationEnabled ? (info.rotation || 0) : 0
       };
+      phones[idStr].color = PHONE_COLORS[info.id % PHONE_COLORS.length];
     });
 
     return {
       type: 'screen',
       detected: ids.length > 0,
       streaming: !!captureStream,
+      sourceRotation: sourceRotation,
+      markEpoch: markEpoch,
       phones: phones
     };
   }
@@ -395,9 +495,13 @@ window.ScreenExample = (function() {
     if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
     if (startBtn) startBtn.removeEventListener('click', startSharing);
     if (stopBtn)  stopBtn.removeEventListener('click', stopSharing);
+    if (rotateBtn) rotateBtn.removeEventListener('click', rotateSource);
+    if (clearBtn)  clearBtn.removeEventListener('click', clearMarks);
     stopSharing();
     panel = null; videoEl = null; overlaySvg = null;
     startBtn = null; stopBtn = null; statusEl = null;
+    rotateBtn = null; clearBtn = null;
+    marks = {}; activeStroke = {};
     latestMarkerInfos = {};
     stageEl = null;
   }
@@ -410,6 +514,7 @@ window.ScreenExample = (function() {
     onWebrtcReady: onWebrtcReady,
     onWebrtcSignal: onWebrtcSignal,
     onAllMarkersPosition: onAllMarkersPosition,
+    onPhoneTouch: onPhoneTouch,
     setRotationEnabled: setRotationEnabled
   };
 })();

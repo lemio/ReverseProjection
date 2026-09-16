@@ -1,4 +1,4 @@
-const CACHE_NAME = 'revproj-phone-v2';
+const CACHE_NAME = 'revproj-phone-v8';
 const URLS_TO_CACHE = [
   '/phone',
   '/phone/css/phone.css',

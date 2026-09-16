@@ -8,14 +8,14 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #0f0f0f;
-  color: #e2e2e2;
+  background: #ffffff; /* must match BorderPattern.INSIDE — the tracker expects a plain white middle */
+  color: #1a1a1a;
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
 :root {
   --phone-scale: 1;
-  --phone-marker-size: calc(min(75vw, 280px) * var(--phone-scale));
+  --rp-border: 0px; /* set by phoneApp.js from BorderPattern.thickness() */
 }
 
 /* ── Root container ── */
@@ -26,24 +26,37 @@ html, body {
   overflow: hidden;
 }
 
-/* ── Single centred marker — fixed size, always visible at the top ── */
-#marker-single {
+/* ── Tracking border — full-screen canvas, only the edge is painted ── */
+/* Sized in px by phoneApp.js (not 100%), so the on-screen keyboard can't
+   stretch the pattern. */
+#tracking-border {
   position: absolute;
+  left: 0;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: var(--phone-marker-size);
-  height: var(--phone-marker-size);
   z-index: 100;
   pointer-events: none;
-  image-rendering: pixelated;
+}
+
+
+#screen-size-label {
+  position: absolute;
+  top: calc(var(--rp-border) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  font-size: 0.75rem;
+  pointer-events: none;
 }
 
 /* ── Detection spinner — shown in top-right when laptop can't see us ── */
 #detect-spinner {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: calc(var(--rp-border) + 8px);
+  right: calc(var(--rp-border) + 8px);
   width: 20px;
   height: 20px;
   border: 2px solid rgba(255,255,255,0.15);
@@ -66,7 +79,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0f0f0f;
+  background: #ffffff;
   padding: 1rem;
 }
 
@@ -80,7 +93,7 @@ html, body {
 .connect-spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid #2a2a2a;
+  border: 3px solid #e5e5e5;
   border-top-color: #4d7cfe;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -105,20 +118,16 @@ html, body {
 /* ── Example area ── */
 #example-area {
   position: absolute;
-  inset: 0;
+  inset: var(--rp-border);
   z-index: 10;
   display: flex;
   flex-direction: column;
 }
 
-/* Content sits below the single marker. */
+/* Content fills the area inside the tracking border. */
 #example-content {
   flex: 1;
   min-height: 0;
-  margin-top: calc(var(--phone-marker-size) + 8px);
-  margin-left: 0;
-  margin-right: 0;
-  margin-bottom: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -134,15 +143,48 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 0.3rem 0.75rem;
-  background: rgba(26, 26, 26, 0.85);
-  border-top: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.9);
+  border-top: 1px solid rgba(0,0,0,0.06);
   font-size: 0.75rem;
   z-index: 20;
 }
 
 #example-name {
   font-weight: 600;
-  color: #e2e2e2;
+  color: #1a1a1a;
+}
+
+#status-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Fullscreen toggle. Without the Fullscreen API (iOS) it explains how to get
+   a fullscreen app instead — see toggleFullscreen in phoneApp.js. */
+#fullscreen-btn {
+  display: block;
+  border: 0;
+  background: transparent;
+  color: #444;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.1rem 0.2rem;
+  cursor: pointer;
+}
+#toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--rp-border) + 2.5rem);
+  transform: translateX(-50%);
+  z-index: 300;
+  max-width: 80%;
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  font-size: 0.78rem;
+  text-align: center;
 }
 
 #connection-indicator {
